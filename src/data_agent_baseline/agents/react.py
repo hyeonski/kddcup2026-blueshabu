@@ -37,6 +37,16 @@ _PARSE_RECOVERY_HINT = (
 )
 
 
+_FORCE_ANSWER_HINT = (
+    "You have not submitted an answer and this is your final attempt. "
+    "Reply with ONLY one JSON object whose `action` is `answer` and whose "
+    "`action_input` follows the answer tool schema (columns + rows). "
+    "Use your best inference from the data and reasoning gathered so far. "
+    "If you are uncertain, return your most likely candidate; an empty rows "
+    "list is acceptable. Do not call any other tool. Do not include prose."
+)
+
+
 def _strip_json_fence(raw_response: str) -> str:
     text = raw_response.strip()
     fence_match = re.search(r"```json\s*(.*?)\s*```", text, flags=re.IGNORECASE | re.DOTALL)
@@ -231,6 +241,9 @@ class ReActAgent:
                 )
                 self._flush_checkpoint(task, state, checkpoint_writer)
 
+        if state.answer is None and state.steps:
+            self._attempt_forced_answer(task, state, checkpoint_writer)
+
         if state.answer is None and state.failure_reason is None:
             state.failure_reason = "Agent did not submit an answer within max_steps."
 
@@ -240,3 +253,92 @@ class ReActAgent:
             steps=list(state.steps),
             failure_reason=state.failure_reason,
         )
+
+    def _attempt_forced_answer(
+        self,
+        task: PublicTask,
+        state: AgentRuntimeState,
+        checkpoint_writer: CheckpointWriter | None,
+    ) -> None:
+        forced_index = (state.steps[-1].step_index if state.steps else 0) + 1
+        base_messages = self._build_messages(task, state)
+        forced_messages = base_messages + [ModelMessage(role="user", content=_FORCE_ANSWER_HINT)]
+        try:
+            model_step, raw_response, parse_error = self._complete_with_parse_recovery(forced_messages)
+        except Exception as exc:  # noqa: BLE001
+            state.steps.append(
+                StepRecord(
+                    step_index=forced_index,
+                    thought="",
+                    action="__forced_error__",
+                    action_input={},
+                    raw_response="",
+                    observation={"ok": False, "error": str(exc)},
+                    ok=False,
+                )
+            )
+            self._flush_checkpoint(task, state, checkpoint_writer)
+            return
+
+        if model_step is None:
+            state.steps.append(
+                StepRecord(
+                    step_index=forced_index,
+                    thought="",
+                    action="__forced_error__",
+                    action_input={},
+                    raw_response=raw_response,
+                    observation={"ok": False, "error": parse_error or "parse failed"},
+                    ok=False,
+                )
+            )
+            self._flush_checkpoint(task, state, checkpoint_writer)
+            return
+
+        if model_step.action != "answer":
+            state.steps.append(
+                StepRecord(
+                    step_index=forced_index,
+                    thought=model_step.thought,
+                    action=f"__forced_non_answer__:{model_step.action}",
+                    action_input=model_step.action_input,
+                    raw_response=raw_response,
+                    observation={"ok": False, "error": "Forced attempt did not call the answer tool."},
+                    ok=False,
+                )
+            )
+            self._flush_checkpoint(task, state, checkpoint_writer)
+            return
+
+        try:
+            tool_result = self.tools.execute(task, model_step.action, model_step.action_input)
+        except Exception as exc:  # noqa: BLE001
+            state.steps.append(
+                StepRecord(
+                    step_index=forced_index,
+                    thought=model_step.thought,
+                    action=model_step.action,
+                    action_input=model_step.action_input,
+                    raw_response=raw_response,
+                    observation={"ok": False, "error": str(exc)},
+                    ok=False,
+                )
+            )
+            self._flush_checkpoint(task, state, checkpoint_writer)
+            return
+
+        observation = {"ok": tool_result.ok, "tool": "answer (forced)", "content": tool_result.content}
+        state.steps.append(
+            StepRecord(
+                step_index=forced_index,
+                thought=model_step.thought,
+                action="answer",
+                action_input=model_step.action_input,
+                raw_response=raw_response,
+                observation=observation,
+                ok=tool_result.ok,
+            )
+        )
+        if tool_result.is_terminal and tool_result.answer is not None:
+            state.answer = tool_result.answer
+        self._flush_checkpoint(task, state, checkpoint_writer)
