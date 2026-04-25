@@ -14,9 +14,17 @@ from rich.progress import (
 )
 from rich.table import Table
 
+import os
+
 from data_agent_baseline.benchmark.dataset import DABenchPublicDataset
-from data_agent_baseline.config import load_app_config
+from data_agent_baseline.config import (
+    ENV_MODEL_API_KEY,
+    ENV_MODEL_API_URL,
+    ENV_MODEL_NAME,
+    load_app_config,
+)
 from data_agent_baseline.run.runner import TaskRunArtifacts, create_run_output_dir, run_benchmark, run_single_task
+from data_agent_baseline.scoring import DEFAULT_LAMBDA, score_run
 from data_agent_baseline.tools.filesystem import list_context_tree
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -106,6 +114,24 @@ def status(
                 f"{difficulty}={count}" for difficulty, count in sorted(counts.items())
             )
             console.print(f"Public task counts: {rendered_counts}")
+
+    model_table = Table(title="Model Access (env > YAML > default)")
+    model_table.add_column("Item")
+    model_table.add_column("Source")
+    model_table.add_column("Value")
+    for env_name, resolved_value, mask in (
+        (ENV_MODEL_API_URL, app_config.agent.api_base, False),
+        (ENV_MODEL_NAME, app_config.agent.model, False),
+        (ENV_MODEL_API_KEY, app_config.agent.api_key, True),
+    ):
+        env_present = bool(os.environ.get(env_name, "").strip())
+        source = "env" if env_present else ("yaml" if resolved_value else "unset")
+        if mask:
+            display = f"len={len(resolved_value)}" if resolved_value else "(empty)"
+        else:
+            display = resolved_value or "(empty)"
+        model_table.add_row(env_name, source, display)
+    console.print(model_table)
 
 
 @app.command("inspect-task")
@@ -255,6 +281,57 @@ def run_benchmark_command(
     console.print(f"Run output: {run_output_dir}")
     console.print(f"Tasks attempted: {len(artifacts)}")
     console.print(f"Succeeded tasks: {sum(1 for item in artifacts if item.succeeded)}")
+
+
+@app.command("score")
+def score_command(
+    run_id: str = typer.Argument(..., help="Run directory name under run.output_dir."),
+    config: Path = typer.Option(..., exists=True, dir_okay=False, help="YAML config path."),
+    gold_root: Path = typer.Option(
+        DATA_DIR / "public" / "output",
+        "--gold-root",
+        help="Directory containing task_<id>/gold.csv files.",
+    ),
+    lambda_value: float = typer.Option(
+        DEFAULT_LAMBDA,
+        "--lambda",
+        help="Penalty weight for extra columns.",
+    ),
+) -> None:
+    """Score a completed run against gold CSVs using the official-style formula."""
+    app_config = load_app_config(config)
+    run_dir = app_config.run.output_dir / run_id
+    if not run_dir.is_dir():
+        raise typer.BadParameter(f"Run directory not found: {run_dir}", param_hint="run_id")
+    if not gold_root.is_dir():
+        raise typer.BadParameter(f"Gold root not found: {gold_root}", param_hint="--gold-root")
+
+    result = score_run(run_dir=run_dir, gold_root=gold_root, lambda_=lambda_value)
+
+    table = Table(title=f"Scores: {run_id} (lambda={lambda_value})")
+    table.add_column("Task")
+    table.add_column("Recall", justify="right")
+    table.add_column("Extras", justify="right")
+    table.add_column("Score", justify="right")
+    table.add_column("Matched/Gold", justify="right")
+    table.add_column("Pred", justify="right")
+    table.add_column("Note")
+
+    for ts in result.task_scores:
+        table.add_row(
+            ts.task_id,
+            f"{ts.recall:.2f}",
+            f"{ts.extras_ratio:.2f}",
+            f"{ts.score:.2f}",
+            f"{ts.matched_columns}/{ts.gold_columns}",
+            str(ts.predicted_columns),
+            ts.error or "",
+        )
+    console.print(table)
+    console.print(
+        f"Total tasks: {len(result.task_scores)} | "
+        f"Average score: {result.total:.4f}"
+    )
 
 
 def main() -> None:

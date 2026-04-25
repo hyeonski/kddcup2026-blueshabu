@@ -33,19 +33,31 @@ class OpenAIModelAdapter:
         api_base: str,
         api_key: str,
         temperature: float,
+        request_timeout_seconds: float = 60.0,
+        max_retries: int = 1,
     ) -> None:
         self.model = model
         self.api_base = api_base.rstrip("/")
         self.api_key = api_key
         self.temperature = temperature
+        self.request_timeout_seconds = request_timeout_seconds
+        self.max_retries = max_retries
 
     def complete(self, messages: list[ModelMessage]) -> str:
         if not self.api_key:
-            raise RuntimeError("Missing model API key in config.agent.api_key.")
+            raise RuntimeError(
+                "Missing model API key. Set MODEL_API_KEY env var (preferred) or agent.api_key in config."
+            )
+        if not self.api_base:
+            raise RuntimeError(
+                "Missing model API base URL. Set MODEL_API_URL env var (preferred) or agent.api_base in config."
+            )
 
         client = OpenAI(
             api_key=self.api_key,
             base_url=self.api_base,
+            timeout=self.request_timeout_seconds,
+            max_retries=self.max_retries,
         )
 
         try:

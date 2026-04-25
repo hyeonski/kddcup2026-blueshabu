@@ -15,6 +15,7 @@ from data_agent_baseline.agents.model import OpenAIModelAdapter
 from data_agent_baseline.agents.react import ReActAgent, ReActAgentConfig
 from data_agent_baseline.benchmark.dataset import DABenchPublicDataset
 from data_agent_baseline.config import AppConfig
+from data_agent_baseline.scoring.normalize import normalize_value
 from data_agent_baseline.tools.registry import ToolRegistry, create_default_tool_registry
 
 
@@ -80,7 +81,7 @@ def _write_csv(path: Path, columns: list[str], rows: list[list[Any]]) -> None:
         writer = csv.writer(handle)
         writer.writerow(columns)
         for row in rows:
-            writer.writerow(row)
+            writer.writerow([normalize_value(cell) for cell in row])
 
 
 def _failure_run_result_payload(task_id: str, failure_reason: str) -> dict[str, Any]:

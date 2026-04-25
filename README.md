@@ -76,6 +76,34 @@ The `context/` directory may contain one or more of:
 - SQLite / DB files
 - Text documents
 
+## Model access
+
+Resolution priority is **env > YAML > default**. The official evaluation
+container injects `MODEL_API_URL`, `MODEL_API_KEY`, and `MODEL_NAME`, which
+override anything in the YAML — so the same image runs locally and in the
+grader without code changes. Hardcoding endpoints/keys is also explicitly
+forbidden by the competition rules.
+
+For local development, prefer env vars over editing the YAML:
+
+```bash
+export MODEL_API_URL=https://api.openai.com/v1
+export MODEL_API_KEY=sk-...
+export MODEL_NAME=gpt-4o-mini
+```
+
+For local Qwen3.5-35B-A3B testing (e.g. via vLLM in OpenAI-compatible mode):
+
+```bash
+export MODEL_API_URL=http://localhost:8000/v1
+export MODEL_API_KEY=local
+export MODEL_NAME=Qwen3.5-35B-A3B
+```
+
+`uv run dabench status --config <path>` prints a "Model Access" table that
+shows whether each value came from `env`, `yaml`, or is `unset`. The API
+key is never printed — only its length.
+
 ## Configuration
 
 An example config file lives at `configs/react_baseline.example.yaml`.
@@ -103,9 +131,9 @@ Config fields:
 | Field | Meaning |
 | --- | --- |
 | `dataset.root_path` | Root directory of the public demo `input/` dataset. Relative paths are resolved from the project root. |
-| `agent.model` | Model name. |
-| `agent.api_base` | OpenAI-compatible API base URL. |
-| `agent.api_key` | API key, read directly from the config file. |
+| `agent.model` | Model name. Overridden by env `MODEL_NAME` when set. |
+| `agent.api_base` | OpenAI-compatible API base URL. Overridden by env `MODEL_API_URL` when set. |
+| `agent.api_key` | API key. Overridden by env `MODEL_API_KEY` when set. Never commit real keys. |
 | `agent.max_steps` | Maximum ReAct steps per task. |
 | `agent.temperature` | Sampling temperature. |
 | `run.output_dir` | Output directory for run artifacts. |
@@ -125,8 +153,16 @@ uv run dabench <command> --config PATH [options]
 | `inspect-task` | Show task metadata and list accessible files under `context/`. | `uv run dabench inspect-task task_1 --config configs/react_baseline.local.yaml` |
 | `run-task` | Run the baseline on one task and write outputs. | `uv run dabench run-task task_1 --config configs/react_baseline.local.yaml` |
 | `run-benchmark` | Run the baseline across the public dataset. | `uv run dabench run-benchmark --config configs/react_baseline.local.yaml` |
+| `score` | Score a completed run against `data/public/output/*/gold.csv`. | `uv run dabench score <run_id> --config configs/react_baseline.local.yaml` |
 
 `run-benchmark` also supports `--limit N` to cap the number of tasks.
+
+`score` reproduces the leaderboard formula
+`max(0, Recall − λ × extras/predicted)` with column matching by
+normalized, sorted value signatures. Override λ with `--lambda 0.5`. Values
+are normalized (numeric → 2 decimal places, null variants → empty,
+strings trimmed) before comparison, matching the rules at
+https://dataagent.top/rules.
 
 ## Tools
 

@@ -19,6 +19,14 @@ from data_agent_baseline.tools.registry import ToolRegistry
 @dataclass(frozen=True, slots=True)
 class ReActAgentConfig:
     max_steps: int = 16
+    parse_retries: int = 2
+
+
+_PARSE_RECOVERY_HINT = (
+    "Your previous response could not be parsed as a single JSON object: {error}. "
+    "Reply with ONLY one JSON object containing keys `thought`, `action`, `action_input`. "
+    "Do not include any prose, markdown fences, or trailing text."
+)
 
 
 def _strip_json_fence(raw_response: str) -> str:
@@ -94,12 +102,53 @@ class ReActAgent:
             )
         return messages
 
+    def _complete_with_parse_recovery(
+        self, base_messages: list[ModelMessage]
+    ) -> tuple[ModelStep | None, str, str | None]:
+        """Call model and parse; retry on parse errors with a corrective hint.
+
+        Returns (model_step, last_raw_response, last_error). model_step is None when
+        all retries failed.
+        """
+        messages = list(base_messages)
+        last_raw_response = ""
+        last_error: str | None = None
+        for attempt in range(self.config.parse_retries + 1):
+            last_raw_response = self.model.complete(messages)
+            try:
+                return parse_model_step(last_raw_response), last_raw_response, None
+            except Exception as exc:  # noqa: BLE001 — surface any parse failure
+                last_error = str(exc)
+                if attempt == self.config.parse_retries:
+                    break
+                messages = messages + [
+                    ModelMessage(role="assistant", content=last_raw_response),
+                    ModelMessage(
+                        role="user",
+                        content=_PARSE_RECOVERY_HINT.format(error=last_error),
+                    ),
+                ]
+        return None, last_raw_response, last_error
+
     def run(self, task: PublicTask) -> AgentRunResult:
         state = AgentRuntimeState()
         for step_index in range(1, self.config.max_steps + 1):
-            raw_response = self.model.complete(self._build_messages(task, state))
+            base_messages = self._build_messages(task, state)
+            model_step, raw_response, parse_error = self._complete_with_parse_recovery(base_messages)
+            if model_step is None:
+                state.steps.append(
+                    StepRecord(
+                        step_index=step_index,
+                        thought="",
+                        action="__error__",
+                        action_input={},
+                        raw_response=raw_response,
+                        observation={"ok": False, "error": parse_error or "parse failed"},
+                        ok=False,
+                    )
+                )
+                continue
             try:
-                model_step = parse_model_step(raw_response)
                 tool_result = self.tools.execute(task, model_step.action, model_step.action_input)
                 observation = {
                     "ok": tool_result.ok,
@@ -127,9 +176,9 @@ class ReActAgent:
                 state.steps.append(
                     StepRecord(
                         step_index=step_index,
-                        thought="",
-                        action="__error__",
-                        action_input={},
+                        thought=model_step.thought,
+                        action=model_step.action,
+                        action_input=model_step.action_input,
                         raw_response=raw_response,
                         observation=observation,
                         ok=False,

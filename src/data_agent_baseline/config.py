@@ -1,9 +1,24 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
+
+ENV_MODEL_API_URL = "MODEL_API_URL"
+ENV_MODEL_API_KEY = "MODEL_API_KEY"
+ENV_MODEL_NAME = "MODEL_NAME"
+
+
+def _resolve_str(env_name: str, yaml_value: object, default: str) -> str:
+    env_value = os.environ.get(env_name, "").strip()
+    if env_value:
+        return env_value
+    if yaml_value is None:
+        return default
+    text = str(yaml_value)
+    return text if text else default
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -68,9 +83,9 @@ def load_app_config(config_path: Path) -> AppConfig:
         root_path=_path_value(dataset_payload.get("root_path"), dataset_defaults.root_path),
     )
     agent_config = AgentConfig(
-        model=str(agent_payload.get("model", agent_defaults.model)),
-        api_base=str(agent_payload.get("api_base", agent_defaults.api_base)),
-        api_key=str(agent_payload.get("api_key", agent_defaults.api_key)),
+        model=_resolve_str(ENV_MODEL_NAME, agent_payload.get("model"), agent_defaults.model),
+        api_base=_resolve_str(ENV_MODEL_API_URL, agent_payload.get("api_base"), agent_defaults.api_base),
+        api_key=_resolve_str(ENV_MODEL_API_KEY, agent_payload.get("api_key"), agent_defaults.api_key),
         max_steps=int(agent_payload.get("max_steps", agent_defaults.max_steps)),
         temperature=float(agent_payload.get("temperature", agent_defaults.temperature)),
     )
