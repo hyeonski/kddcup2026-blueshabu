@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import json
 import multiprocessing
+import os
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
@@ -17,6 +18,9 @@ from data_agent_baseline.benchmark.dataset import DABenchPublicDataset
 from data_agent_baseline.config import AppConfig
 from data_agent_baseline.scoring.normalize import normalize_value
 from data_agent_baseline.tools.registry import ToolRegistry, create_default_tool_registry
+
+CHECKPOINT_FILENAME = "trace.partial.json"
+TRACE_FILENAME = "trace.json"
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,8 +75,47 @@ def build_model_adapter(config: AppConfig):
     )
 
 
+def _resolve_wall_budget(config: AppConfig) -> float | None:
+    if config.agent.wall_budget_seconds is not None:
+        return config.agent.wall_budget_seconds
+    if config.run.task_timeout_seconds <= 0:
+        return None
+    derived = config.run.task_timeout_seconds - config.agent.safety_margin_seconds
+    return max(derived, 1.0)
+
+
+def _build_react_config(config: AppConfig) -> ReActAgentConfig:
+    return ReActAgentConfig(
+        max_steps=config.agent.max_steps,
+        wall_budget_seconds=_resolve_wall_budget(config),
+        safety_margin_seconds=config.agent.safety_margin_seconds,
+    )
+
+
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+
+
+def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    tmp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+    os.replace(tmp_path, path)
+
+
+def _make_checkpoint_writer(checkpoint_path: Path) -> Callable[[dict[str, Any]], None]:
+    def _writer(payload: dict[str, Any]) -> None:
+        _atomic_write_json(checkpoint_path, payload)
+    return _writer
+
+
+def _read_checkpoint(checkpoint_path: Path) -> dict[str, Any] | None:
+    if not checkpoint_path.exists():
+        return None
+    try:
+        return json.loads(checkpoint_path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
 
 
 def _write_csv(path: Path, columns: list[str], rows: list[list[Any]]) -> None:
@@ -100,6 +143,7 @@ def _run_single_task_core(
     config: AppConfig,
     model=None,
     tools: ToolRegistry | None = None,
+    checkpoint_path: Path | None = None,
 ) -> dict[str, Any]:
     public_dataset = DABenchPublicDataset(config.dataset.root_path)
     task = public_dataset.get_task(task_id)
@@ -107,18 +151,27 @@ def _run_single_task_core(
     agent = ReActAgent(
         model=model or build_model_adapter(config),
         tools=tools or create_default_tool_registry(),
-        config=ReActAgentConfig(max_steps=config.agent.max_steps),
+        config=_build_react_config(config),
     )
-    run_result = agent.run(task)
+    writer = _make_checkpoint_writer(checkpoint_path) if checkpoint_path is not None else None
+    run_result = agent.run(task, checkpoint_writer=writer)
     return run_result.to_dict()
 
 
-def _run_single_task_in_subprocess(task_id: str, config: AppConfig, queue: multiprocessing.Queue[Any]) -> None:
+def _run_single_task_in_subprocess(
+    task_id: str,
+    config: AppConfig,
+    checkpoint_path_str: str | None,
+    queue: multiprocessing.Queue[Any],
+) -> None:
     try:
+        checkpoint_path = Path(checkpoint_path_str) if checkpoint_path_str else None
         queue.put(
             {
                 "ok": True,
-                "run_result": _run_single_task_core(task_id=task_id, config=config),
+                "run_result": _run_single_task_core(
+                    task_id=task_id, config=config, checkpoint_path=checkpoint_path
+                ),
             }
         )
     except BaseException as exc:  # noqa: BLE001
@@ -130,15 +183,38 @@ def _run_single_task_in_subprocess(task_id: str, config: AppConfig, queue: multi
         )
 
 
-def _run_single_task_with_timeout(*, task_id: str, config: AppConfig) -> dict[str, Any]:
+def _recover_from_checkpoint(
+    task_id: str,
+    checkpoint_path: Path | None,
+    timeout_message: str,
+) -> dict[str, Any]:
+    if checkpoint_path is None:
+        return _failure_run_result_payload(task_id, timeout_message)
+    payload = _read_checkpoint(checkpoint_path)
+    if payload is None:
+        return _failure_run_result_payload(task_id, timeout_message)
+    recovered_steps = len(payload.get("steps", []))
+    payload["failure_reason"] = (
+        f"{timeout_message} Recovered {recovered_steps} steps from checkpoint."
+    )
+    payload["succeeded"] = False
+    return payload
+
+
+def _run_single_task_with_timeout(
+    *,
+    task_id: str,
+    config: AppConfig,
+    checkpoint_path: Path | None = None,
+) -> dict[str, Any]:
     timeout_seconds = config.run.task_timeout_seconds
     if timeout_seconds <= 0:
-        return _run_single_task_core(task_id=task_id, config=config)
+        return _run_single_task_core(task_id=task_id, config=config, checkpoint_path=checkpoint_path)
 
     queue: multiprocessing.Queue[Any] = multiprocessing.Queue()
     process = multiprocessing.Process(
         target=_run_single_task_in_subprocess,
-        args=(task_id, config, queue),
+        args=(task_id, config, str(checkpoint_path) if checkpoint_path else None, queue),
     )
     process.start()
     process.join(timeout_seconds)
@@ -149,28 +225,47 @@ def _run_single_task_with_timeout(*, task_id: str, config: AppConfig) -> dict[st
         if process.is_alive():
             process.kill()
             process.join()
-        return _failure_run_result_payload(task_id, f"Task timed out after {timeout_seconds} seconds.")
+        return _recover_from_checkpoint(
+            task_id,
+            checkpoint_path,
+            f"Task timed out after {timeout_seconds} seconds.",
+        )
 
     if queue.empty():
         exit_code = process.exitcode
         if exit_code not in (None, 0):
-            return _failure_run_result_payload(
+            return _recover_from_checkpoint(
                 task_id,
+                checkpoint_path,
                 f"Task exited unexpectedly with exit code {exit_code}.",
             )
-        return _failure_run_result_payload(task_id, "Task exited without returning a result.")
+        return _recover_from_checkpoint(
+            task_id,
+            checkpoint_path,
+            "Task exited without returning a result.",
+        )
 
     result = queue.get()
     if result.get("ok"):
         return dict(result["run_result"])
-    return _failure_run_result_payload(task_id, f"Task failed with uncaught error: {result['error']}")
+    return _recover_from_checkpoint(
+        task_id,
+        checkpoint_path,
+        f"Task failed with uncaught error: {result['error']}",
+    )
 
 
 def _write_task_outputs(task_id: str, run_output_dir: Path, run_result: dict[str, Any]) -> TaskRunArtifacts:
     task_output_dir = run_output_dir / task_id
     task_output_dir.mkdir(parents=True, exist_ok=True)
-    trace_path = task_output_dir / "trace.json"
+    trace_path = task_output_dir / TRACE_FILENAME
     _write_json(trace_path, run_result)
+    checkpoint_path = task_output_dir / CHECKPOINT_FILENAME
+    if checkpoint_path.exists():
+        try:
+            checkpoint_path.unlink()
+        except OSError:
+            pass
 
     prediction_csv_path: Path | None = None
     answer = run_result.get("answer")
@@ -201,10 +296,21 @@ def run_single_task(
     tools: ToolRegistry | None = None,
 ) -> TaskRunArtifacts:
     started_at = perf_counter()
+    task_output_dir = run_output_dir / task_id
+    task_output_dir.mkdir(parents=True, exist_ok=True)
+    checkpoint_path = task_output_dir / CHECKPOINT_FILENAME
     if model is None and tools is None:
-        run_result = _run_single_task_with_timeout(task_id=task_id, config=config)
+        run_result = _run_single_task_with_timeout(
+            task_id=task_id, config=config, checkpoint_path=checkpoint_path
+        )
     else:
-        run_result = _run_single_task_core(task_id=task_id, config=config, model=model, tools=tools)
+        run_result = _run_single_task_core(
+            task_id=task_id,
+            config=config,
+            model=model,
+            tools=tools,
+            checkpoint_path=checkpoint_path,
+        )
     run_result["e2e_elapsed_seconds"] = round(perf_counter() - started_at, 3)
     return _write_task_outputs(task_id, run_output_dir, run_result)
 

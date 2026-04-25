@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
+from time import perf_counter
+from typing import Any
 
 from data_agent_baseline.agents.model import ModelAdapter, ModelMessage, ModelStep
 from data_agent_baseline.agents.prompt import (
@@ -20,6 +23,11 @@ from data_agent_baseline.tools.registry import ToolRegistry
 class ReActAgentConfig:
     max_steps: int = 16
     parse_retries: int = 2
+    wall_budget_seconds: float | None = None
+    safety_margin_seconds: float = 30.0
+
+
+CheckpointWriter = Callable[[dict[str, Any]], None]
 
 
 _PARSE_RECOVERY_HINT = (
@@ -130,9 +138,43 @@ class ReActAgent:
                 ]
         return None, last_raw_response, last_error
 
-    def run(self, task: PublicTask) -> AgentRunResult:
+    def _build_partial_result(self, task: PublicTask, state: AgentRuntimeState) -> AgentRunResult:
+        return AgentRunResult(
+            task_id=task.task_id,
+            answer=state.answer,
+            steps=list(state.steps),
+            failure_reason=state.failure_reason,
+        )
+
+    def _flush_checkpoint(
+        self,
+        task: PublicTask,
+        state: AgentRuntimeState,
+        writer: CheckpointWriter | None,
+    ) -> None:
+        if writer is None:
+            return
+        try:
+            writer(self._build_partial_result(task, state).to_dict())
+        except Exception:  # noqa: BLE001 — checkpoint failure must not crash the agent
+            pass
+
+    def run(
+        self,
+        task: PublicTask,
+        *,
+        checkpoint_writer: CheckpointWriter | None = None,
+    ) -> AgentRunResult:
         state = AgentRuntimeState()
+        started_at = perf_counter()
+        budget = self.config.wall_budget_seconds
+        margin = self.config.safety_margin_seconds
         for step_index in range(1, self.config.max_steps + 1):
+            if budget is not None and (perf_counter() - started_at) > max(budget - margin, 0.0):
+                state.failure_reason = (
+                    f"Wall budget reached after step {step_index - 1} (budget={budget}s, margin={margin}s)."
+                )
+                break
             base_messages = self._build_messages(task, state)
             model_step, raw_response, parse_error = self._complete_with_parse_recovery(base_messages)
             if model_step is None:
@@ -147,6 +189,7 @@ class ReActAgent:
                         ok=False,
                     )
                 )
+                self._flush_checkpoint(task, state, checkpoint_writer)
                 continue
             try:
                 tool_result = self.tools.execute(task, model_step.action, model_step.action_input)
@@ -167,7 +210,9 @@ class ReActAgent:
                 state.steps.append(step_record)
                 if tool_result.is_terminal:
                     state.answer = tool_result.answer
+                    self._flush_checkpoint(task, state, checkpoint_writer)
                     break
+                self._flush_checkpoint(task, state, checkpoint_writer)
             except Exception as exc:
                 observation = {
                     "ok": False,
@@ -184,6 +229,7 @@ class ReActAgent:
                         ok=False,
                     )
                 )
+                self._flush_checkpoint(task, state, checkpoint_writer)
 
         if state.answer is None and state.failure_reason is None:
             state.failure_reason = "Agent did not submit an answer within max_steps."

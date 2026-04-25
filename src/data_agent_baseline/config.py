@@ -43,6 +43,8 @@ class AgentConfig:
     api_key: str = ""
     max_steps: int = 16
     temperature: float = 0.0
+    wall_budget_seconds: float | None = None
+    safety_margin_seconds: float = 30.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,12 +84,16 @@ def load_app_config(config_path: Path) -> AppConfig:
     dataset_config = DatasetConfig(
         root_path=_path_value(dataset_payload.get("root_path"), dataset_defaults.root_path),
     )
+    raw_wall_budget = agent_payload.get("wall_budget_seconds", agent_defaults.wall_budget_seconds)
+    wall_budget_value = float(raw_wall_budget) if raw_wall_budget is not None else None
     agent_config = AgentConfig(
         model=_resolve_str(ENV_MODEL_NAME, agent_payload.get("model"), agent_defaults.model),
         api_base=_resolve_str(ENV_MODEL_API_URL, agent_payload.get("api_base"), agent_defaults.api_base),
         api_key=_resolve_str(ENV_MODEL_API_KEY, agent_payload.get("api_key"), agent_defaults.api_key),
         max_steps=int(agent_payload.get("max_steps", agent_defaults.max_steps)),
         temperature=float(agent_payload.get("temperature", agent_defaults.temperature)),
+        wall_budget_seconds=wall_budget_value,
+        safety_margin_seconds=float(agent_payload.get("safety_margin_seconds", agent_defaults.safety_margin_seconds)),
     )
     raw_run_id = run_payload.get("run_id")
     run_id = run_defaults.run_id
