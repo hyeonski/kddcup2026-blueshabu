@@ -38,16 +38,42 @@ English | [中文](README.zh.md)
    uv sync
    ```
 
-4. Confirm the dataset root is visible:
+4. Set the model env vars. The grader injects these at evaluation time;
+   set them locally for development too. See [Model access](#model-access)
+   for provider-specific examples.
+
+   ```bash
+   export MODEL_API_URL=https://api.deepseek.com/v1   # or OpenAI/OpenRouter/local vLLM
+   export MODEL_API_KEY=sk-...
+   export MODEL_NAME=deepseek-chat
+   ```
+
+   Tip: keep these in a project-local `.env` file (already git-ignored) and
+   load with `set -a && . ./.env && set +a` before running.
+
+5. Confirm the dataset root and model env are wired up. The "Model Access"
+   table should show `source=env` for the three rows:
 
    ```bash
    uv run dabench status --config configs/react_baseline.example.yaml
    ```
 
-5. Run the baseline:
+6. Smoke-test on a single task:
+
+   ```bash
+   uv run dabench run-task task_22 --config configs/react_baseline.example.yaml
+   ```
+
+7. Run the full public benchmark (50 tasks, ~$0.5 with DeepSeek V3):
 
    ```bash
    uv run dabench run-benchmark --config configs/react_baseline.example.yaml
+   ```
+
+8. Score the run against `data/public/output/*/gold.csv`:
+
+   ```bash
+   uv run dabench score example_run_id --config configs/react_baseline.example.yaml
    ```
 
 ## Dataset
@@ -84,15 +110,35 @@ override anything in the YAML — so the same image runs locally and in the
 grader without code changes. Hardcoding endpoints/keys is also explicitly
 forbidden by the competition rules.
 
-For local development, prefer env vars over editing the YAML:
+For local development, prefer env vars over editing the YAML.
+
+**DeepSeek V3** (recommended commercial proxy for Qwen3.5-35B-A3B; ~$0.5
+per 50-task benchmark):
+
+```bash
+export MODEL_API_URL=https://api.deepseek.com/v1
+export MODEL_API_KEY=sk-...                # platform.deepseek.com
+export MODEL_NAME=deepseek-chat            # V3; use deepseek-reasoner for R1
+```
+
+**OpenAI**:
 
 ```bash
 export MODEL_API_URL=https://api.openai.com/v1
 export MODEL_API_KEY=sk-...
-export MODEL_NAME=gpt-4o-mini
+export MODEL_NAME=gpt-4.1-mini             # or gpt-4o-mini
 ```
 
-For local Qwen3.5-35B-A3B testing (e.g. via vLLM in OpenAI-compatible mode):
+**OpenRouter** (one key, many providers — useful for cross-model
+comparison including hosted Qwen3):
+
+```bash
+export MODEL_API_URL=https://openrouter.ai/api/v1
+export MODEL_API_KEY=sk-or-v1-...
+export MODEL_NAME=deepseek/deepseek-chat   # or qwen/qwen3-30b-a3b, etc.
+```
+
+**Local Qwen3.5-35B-A3B** (e.g. via vLLM in OpenAI-compatible mode):
 
 ```bash
 export MODEL_API_URL=http://localhost:8000/v1
@@ -113,15 +159,18 @@ dataset:
   root_path: data/public/input
 
 agent:
+  # Env vars MODEL_API_URL / MODEL_API_KEY / MODEL_NAME override these.
   model: YOUR_MODEL_NAME
   api_base: YOUR_API_BASE_URL
   api_key: YOUR_API_KEY
-  max_steps: 16
+  max_steps: 25
   temperature: 0.0
+  # wall_budget_seconds: null   # auto-derived from task_timeout_seconds - safety_margin
+  # safety_margin_seconds: 30
 
 run:
   output_dir: artifacts/runs
-  run_id:
+  run_id: example_run_id
   max_workers: 4
   task_timeout_seconds: 600
 ```
@@ -136,6 +185,8 @@ Config fields:
 | `agent.api_key` | API key. Overridden by env `MODEL_API_KEY` when set. Never commit real keys. |
 | `agent.max_steps` | Maximum ReAct steps per task. |
 | `agent.temperature` | Sampling temperature. |
+| `agent.wall_budget_seconds` | Optional. Hard wall-clock budget the agent self-enforces, after which the loop exits gracefully and triggers a forced final-answer attempt. If null, derived as `run.task_timeout_seconds - agent.safety_margin_seconds`. |
+| `agent.safety_margin_seconds` | Time reserved between the agent's wall budget and the runner's hard `task_timeout_seconds`. Default 30. |
 | `run.output_dir` | Output directory for run artifacts. |
 | `run.run_id` | Optional run directory name. Defaults to a UTC timestamp if omitted. Must be a single directory name; existing run directories are rejected. |
 | `run.max_workers` | Parallel worker count for `run-benchmark`. |
