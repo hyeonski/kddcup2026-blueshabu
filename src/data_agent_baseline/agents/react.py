@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 from time import perf_counter
-from typing import Any
+from typing import Any, Optional
 
-from data_agent_baseline.agents.model import ModelAdapter, ModelMessage, ModelStep
+from data_agent_baseline.agents.model import ModelAdapter, ModelMessage, ModelStep, ModelAdapterLLMWrapper
 from data_agent_baseline.agents.prompt import (
     REACT_SYSTEM_PROMPT,
     build_observation_prompt,
@@ -18,6 +20,16 @@ from data_agent_baseline.agents.runtime import AgentRunResult, AgentRuntimeState
 from data_agent_baseline.benchmark.schema import PublicTask
 from data_agent_baseline.tools.registry import ToolRegistry
 
+try:
+    from productive_agents.ctxopt.history_optimizer import HistoryOptimizer as ACONHistoryOptimizer
+except ImportError:
+    ACONHistoryOptimizer = None
+
+# PROJECT_ROOT는 src 폴더의 상위 디렉토리 (프로젝트 루트)
+# react.py: ...src/data_agent_baseline/agents/react.py
+# parents[0]: agents, parents[1]: data_agent_baseline, parents[2]: src, parents[3]: PROJECT_ROOT
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+
 
 @dataclass(frozen=True, slots=True)
 class ReActAgentConfig:
@@ -25,6 +37,10 @@ class ReActAgentConfig:
     parse_retries: int = 2
     wall_budget_seconds: float | None = None
     safety_margin_seconds: float = 30.0
+    # ACON Context Optimization
+    enable_context_optimization: bool = False
+    # history_summarization_threshold: 이 토큰 이상이면 압축 수행 (-1 = 매번 압축)
+    history_summarization_threshold: int = 4000
 
 
 CheckpointWriter = Callable[[dict[str, Any]], None]
@@ -105,14 +121,68 @@ class ReActAgent:
         self.tools = tools
         self.config = config or ReActAgentConfig()
         self.system_prompt = system_prompt or REACT_SYSTEM_PROMPT
+        self.logger = logging.getLogger(__name__)
+        
+        # ACON HistoryOptimizer 초기화
+        self.history_optimizer: Any = None
+        self.compressed_history: str | None = None
+        
+        if self.config.enable_context_optimization and ACONHistoryOptimizer is not None:
+            try:
+                # ACON-main의 HistoryOptimizer를 사용
+                # ACON은 config.get("history_prompt_dir", None)를 우선으로 확인
+                prompt_dir_path = str(PROJECT_ROOT / "acon-main" / "experiments" / "appworld" / "prompts" / "context_opt")
+                
+                acon_config = {
+                    "model": model.model if hasattr(model, 'model') else "qwen/qwen3.5-35b-a3b",
+                    "temperature": model.temperature if hasattr(model, 'temperature') else 1.0,
+                    "history_summarization_threshold": self.config.history_summarization_threshold,
+                    # ACON이 찾는 키 - config에서 우선 확인
+                    "history_prompt_dir": prompt_dir_path,
+                    # 프롬프트 템플릿 이름 설정
+                    "prompts": {
+                        "prompt_system": "system_prompt",
+                        "prompt_history_user": "prompt_history_v2",  # v2 버전 사용
+                    }
+                }
+                
+                # ModelAdapter를 ACON 호환 형식으로 래핑
+                wrapped_model = ModelAdapterLLMWrapper(model)
+                
+                # ACON의 HistoryOptimizer 생성
+                # prompt_dir 파라미터는 무시됨 (config에서 history_prompt_dir이 우선)
+                self.history_optimizer = ACONHistoryOptimizer(
+                    config=acon_config,
+                    debug_mode=False,
+                    llm=wrapped_model
+                )
+            except Exception as e:
+                self.logger.warning(f"[ACON] ✗ Failed to initialize HistoryOptimizer: {e}")
+                import traceback
+                self.logger.warning(traceback.format_exc())
+                self.history_optimizer = None
+
+
 
     def _build_messages(self, task: PublicTask, state: AgentRuntimeState) -> list[ModelMessage]:
+        """Build messages for model. Include compressed history if available."""
         system_content = build_system_prompt(
             self.tools.describe_for_prompt(),
             system_prompt=self.system_prompt,
         )
         messages = [ModelMessage(role="system", content=system_content)]
         messages.append(ModelMessage(role="user", content=build_task_prompt(task)))
+        
+        # 압축된 history가 있으면 포함
+        if self.compressed_history:
+            messages.append(
+                ModelMessage(
+                    role="user",
+                    content=f"[Previous context summary]\n{self.compressed_history}"
+                )
+            )
+        
+        # 현재 steps 추가
         for step in state.steps:
             messages.append(ModelMessage(role="assistant", content=step.raw_response))
             messages.append(
@@ -169,6 +239,64 @@ class ReActAgent:
         except Exception:  # noqa: BLE001 — checkpoint failure must not crash the agent
             pass
 
+    def _try_compress_history(self, task: PublicTask, state: AgentRuntimeState) -> None:
+        """ACON HistoryOptimizer를 사용해 history 압축"""
+        if not self.history_optimizer or not state.steps:
+            return
+        
+        step_count = len(state.steps)
+        task_id = task.task_id if hasattr(task, 'task_id') else "unknown"
+        
+        # History를 텍스트 포맷으로 변환
+        history_text = self._format_steps_for_compression(state.steps)
+        current_len_chars = len(history_text)
+        current_len_with_summary = len((self.compressed_history or "") + history_text)
+        
+        # ACON의 check_summarization_needed 호출
+        needs_compression = self.history_optimizer.check_summarization_needed(
+            history_text, self.compressed_history
+        )
+        
+        if not needs_compression:
+            return
+        
+        # ACON의 process() 호출
+        # 파라미터: task, history (formatting된 텍스트), prev_history_summary
+        try:
+            compressed = self.history_optimizer.process(
+                task=task.question,
+                history=history_text,
+                prev_history_summary=self.compressed_history,
+                raw_history=[],
+                opt_args={}
+            )
+            
+            # process()는 (summary, index)를 반환하는데, 첫 번째만 사용함
+            if isinstance(compressed, tuple):
+                compressed_text = compressed[0]
+            else:
+                compressed_text = compressed
+            
+            if compressed_text:
+                self.compressed_history = compressed_text
+                
+        except Exception as e:
+            pass
+
+    def _format_steps_for_compression(self, steps: list[StepRecord]) -> str:
+        """ACON HistoryOptimizer에 전달할 형식으로 steps를 포맷"""
+        formatted = []
+        for step in steps:
+            step_text = f"Step {step.step_index}:\n"
+            step_text += f"  Thought: {step.thought}\n"
+            step_text += f"  Action: {step.action}\n"
+            step_text += f"  Action Input: {json.dumps(step.action_input, ensure_ascii=False)}\n"
+            if step.observation:
+                obs_str = json.dumps(step.observation, ensure_ascii=False)
+                step_text += f"  Observation: {obs_str}\n"
+            formatted.append(step_text)
+        return "\n".join(formatted)
+
     def run(
         self,
         task: PublicTask,
@@ -218,10 +346,15 @@ class ReActAgent:
                     ok=tool_result.ok,
                 )
                 state.steps.append(step_record)
+                
                 if tool_result.is_terminal:
                     state.answer = tool_result.answer
                     self._flush_checkpoint(task, state, checkpoint_writer)
                     break
+                
+                # Context compression 시도
+                self._try_compress_history(task, state)
+                
                 self._flush_checkpoint(task, state, checkpoint_writer)
             except Exception as exc:
                 observation = {
