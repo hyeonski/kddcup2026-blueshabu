@@ -2,8 +2,6 @@
 
 # DataAgent-Bench Starter Kit
 
-English | [中文](README.zh.md)
-
 [![Official Website](https://img.shields.io/badge/Official%20Website-Visit%20dataagent.top-0ea5e9?style=for-the-badge&logo=googlechrome&logoColor=white&labelColor=0f172a)](https://dataagent.top)
 [![Demo Dataset](https://img.shields.io/badge/Demo%20Dataset-Download%20Phase%201-f59e0b?style=for-the-badge&logo=googledrive&logoColor=white&labelColor=0f172a)](https://drive.google.com/file/d/1c6u5WlFw4KV7CBRyXh5BvFYbKqxhBSbL/view)
 [![Discord](https://img.shields.io/badge/Discord-Join%20Community-5865F2?style=for-the-badge&logo=discord&logoColor=white&labelColor=0f172a)](https://discord.com/invite/7eFwJQN3Fx)
@@ -43,16 +41,24 @@ English | [中文](README.zh.md)
    for provider-specific examples.
 
    ```bash
-   export MODEL_API_URL=https://api.deepseek.com/v1   # or OpenAI/OpenRouter/local vLLM
-   export MODEL_API_KEY=sk-...
-   export MODEL_NAME=deepseek-chat
+   # OpenRouter — same Qwen3.5-35B-A3B checkpoint the grader uses
+   export MODEL_API_URL=https://openrouter.ai/api/v1
+   export MODEL_API_KEY=sk-or-v1-...
+   export MODEL_NAME=qwen/qwen3.5-35b-a3b
+
+   # Recommended: pin OpenRouter routing + seed so cross-provider routing
+   # doesn't add ±0.05 of variance to local benchmark scores
+   # (see benchmarks/variance_2026-05-03.md)
+   export MODEL_PROVIDER_ONLY=alibaba
+   export MODEL_SEED=42
    ```
 
    Tip: keep these in a project-local `.env` file (already git-ignored) and
-   load with `set -a && . ./.env && set +a` before running.
+   load with `set -a && . ./.env && set +a` before running. See
+   [`.env.example`](.env.example) for ready-to-copy provider blocks.
 
 5. Confirm the dataset root and model env are wired up. The "Model Access"
-   table should show `source=env` for the three rows:
+   table should show `source=env` for the rows you exported:
 
    ```bash
    uv run dabench status --config configs/react_baseline.example.yaml
@@ -64,7 +70,8 @@ English | [中文](README.zh.md)
    uv run dabench run-task task_22 --config configs/react_baseline.example.yaml
    ```
 
-7. Run the full public benchmark (50 tasks, ~$0.5 with DeepSeek V3):
+7. Run the full public benchmark (50 tasks, ~17 min on Qwen3.5-35B-A3B
+   via OpenRouter Alibaba):
 
    ```bash
    uv run dabench run-benchmark --config configs/react_baseline.example.yaml
@@ -75,6 +82,23 @@ English | [中文](README.zh.md)
    ```bash
    uv run dabench score example_run_id --config configs/react_baseline.example.yaml
    ```
+
+9. (Optional) Inspect failures by hand. For any task that scored < 1.00,
+   compare the model's prediction to the gold answer side-by-side:
+
+   ```bash
+   diff <(cat artifacts/runs/example_run_id/task_22/prediction.csv) \
+        <(cat data/public/output/task_22/gold.csv)
+   ```
+
+   And read the full ReAct transcript to see what the model did:
+
+   ```bash
+   jq '.steps[] | {step: .step_index, action: .action, thought: .thought}' \
+     artifacts/runs/example_run_id/task_22/trace.json
+   ```
+
+   See [Manual analysis workflow](#manual-analysis-workflow) below for more.
 
 ## Dataset
 
@@ -129,13 +153,20 @@ export MODEL_API_KEY=sk-...
 export MODEL_NAME=gpt-4.1-mini             # or gpt-4o-mini
 ```
 
-**OpenRouter** (one key, many providers — useful for cross-model
-comparison including hosted Qwen3):
+**OpenRouter** (recommended — hosts `qwen/qwen3.5-35b-a3b`, the same
+checkpoint the official grader injects):
 
 ```bash
 export MODEL_API_URL=https://openrouter.ai/api/v1
 export MODEL_API_KEY=sk-or-v1-...
-export MODEL_NAME=deepseek/deepseek-chat   # or qwen/qwen3-30b-a3b, etc.
+export MODEL_NAME=qwen/qwen3.5-35b-a3b
+
+# Optional but strongly recommended for benchmarking. OpenRouter routes
+# requests across multiple backends serving the same model id (different
+# quantization, different inference engine), which adds non-deterministic
+# variance to ReAct trajectories. Pin to a single provider + seed:
+export MODEL_PROVIDER_ONLY=alibaba   # CSV; the model maker's own deployment
+export MODEL_SEED=42                 # any int; constant across runs
 ```
 
 **Local Qwen3.5-35B-A3B** (e.g. via vLLM in OpenAI-compatible mode):
@@ -187,6 +218,8 @@ Config fields:
 | `agent.temperature` | Sampling temperature. |
 | `agent.wall_budget_seconds` | Optional. Hard wall-clock budget the agent self-enforces, after which the loop exits gracefully and triggers a forced final-answer attempt. If null, derived as `run.task_timeout_seconds - agent.safety_margin_seconds`. |
 | `agent.safety_margin_seconds` | Time reserved between the agent's wall budget and the runner's hard `task_timeout_seconds`. Default 30. |
+| `agent.provider_only` | Optional. CSV or list of OpenRouter provider tags to allow (e.g. `alibaba`). Empty = no constraint. Overridden by env `MODEL_PROVIDER_ONLY`. Other OpenAI-compatible servers ignore this. |
+| `agent.seed` | Optional. Int seed for sampling determinism on providers that honor it. Overridden by env `MODEL_SEED`. |
 | `run.output_dir` | Output directory for run artifacts. |
 | `run.run_id` | Optional run directory name. Defaults to a UTC timestamp if omitted. Must be a single directory name; existing run directories are rejected. |
 | `run.max_workers` | Parallel worker count for `run-benchmark`. |
@@ -214,6 +247,88 @@ normalized, sorted value signatures. Override λ with `--lambda 0.5`. Values
 are normalized (numeric → 2 decimal places, null variants → empty,
 strings trimmed) before comparison, matching the rules at
 https://dataagent.top/rules.
+
+## Manual analysis workflow
+
+After a `run-benchmark`, the score table tells you which tasks scored
+< 1.00 but not why. The two artifacts to inspect for any task are
+`prediction.csv` (what the model wrote) and `trace.json` (every step it
+took). Compare them against `data/public/output/task_<id>/gold.csv` to
+classify the failure.
+
+### Quick triage from the score table
+
+```bash
+uv run dabench score example_run_id --config configs/react_baseline.example.yaml
+```
+
+In each row, `Matched/Gold` and `Pred` columns identify the failure mode:
+
+| Pattern | Matched/Gold | Pred | Likely cause |
+| --- | --- | --- | --- |
+| Perfect | `K/K` | `K` | — |
+| Extra columns | `K/K` | `> K` | Model emitted full record instead of single answer column |
+| Wrong value | `0/1` | `1` | Reasoning failure — value content differs from gold |
+| Partial recall | `< K/K` | `K` | Multi-row gold; model found subset |
+| Prediction missing | `0/K` | `0`, note=`prediction missing` | `answer` never called; trace will show no terminal step |
+
+### Diff a single task
+
+```bash
+TASK=task_22
+diff <(cat artifacts/runs/example_run_id/$TASK/prediction.csv) \
+     <(cat data/public/output/$TASK/gold.csv)
+cat data/public/input/$TASK/task.json | jq .question
+```
+
+### Read the agent's trace
+
+`trace.json` contains the full ReAct transcript. Useful queries:
+
+```bash
+# All thoughts + actions in order
+jq '.steps[] | {step: .step_index, action: .action, thought: .thought}' \
+  artifacts/runs/example_run_id/task_22/trace.json
+
+# Just the final answer payload
+jq '.answer' artifacts/runs/example_run_id/task_22/trace.json
+
+# The last raw model response (useful when parse recovery fired)
+jq '.steps[-1].raw_response' artifacts/runs/example_run_id/task_22/trace.json
+
+# Failure reason if the runner caught an exception or timeout
+jq '.failure_reason' artifacts/runs/example_run_id/task_22/trace.json
+```
+
+If the runner timed out, `trace.partial.json` is also written before
+the kill — same shape as `trace.json`, recovered from the in-flight
+checkpoint.
+
+### Bucket failures across the run
+
+```bash
+# All "prediction missing" tasks
+uv run dabench score example_run_id \
+  --config configs/react_baseline.example.yaml | grep "missing"
+
+# Tasks where Pred > Gold count (extra-column over-prediction)
+for d in artifacts/runs/example_run_id/task_*; do
+  task=$(basename $d)
+  pred_cols=$(head -1 $d/prediction.csv 2>/dev/null | awk -F, '{print NF}')
+  gold_cols=$(head -1 data/public/output/$task/gold.csv 2>/dev/null | awk -F, '{print NF}')
+  [ -n "$pred_cols" ] && [ "$pred_cols" -gt "${gold_cols:-0}" ] \
+    && echo "$task: pred=$pred_cols gold=$gold_cols"
+done
+```
+
+### Reference snapshots
+
+- [`benchmarks/baseline_9205902.md`](benchmarks/baseline_9205902.md) — bucket-level
+  analysis of the team master HEAD with this exact workflow.
+- [`benchmarks/variance_2026-05-03.md`](benchmarks/variance_2026-05-03.md) —
+  cross-run variance and how `MODEL_PROVIDER_ONLY=alibaba` reduces it.
+- [`benchmarks/plan_next_improvements.md`](benchmarks/plan_next_improvements.md) —
+  prioritized work items mapped to the failure buckets above.
 
 ## Tools
 
