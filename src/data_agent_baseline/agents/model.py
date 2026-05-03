@@ -35,6 +35,8 @@ class OpenAIModelAdapter:
         temperature: float,
         request_timeout_seconds: float = 60.0,
         max_retries: int = 1,
+        provider_only: tuple[str, ...] = (),
+        seed: int | None = None,
     ) -> None:
         self.model = model
         self.api_base = api_base.rstrip("/")
@@ -42,6 +44,8 @@ class OpenAIModelAdapter:
         self.temperature = temperature
         self.request_timeout_seconds = request_timeout_seconds
         self.max_retries = max_retries
+        self.provider_only = tuple(provider_only)
+        self.seed = seed
 
     def complete(self, messages: list[ModelMessage]) -> str:
         if not self.api_key:
@@ -60,12 +64,28 @@ class OpenAIModelAdapter:
             max_retries=self.max_retries,
         )
 
+        request_kwargs: dict[str, Any] = {
+            "model": self.model,
+            "messages": [
+                {"role": message.role, "content": message.content} for message in messages
+            ],
+            "temperature": self.temperature,
+        }
+        if self.seed is not None:
+            request_kwargs["seed"] = self.seed
+        if self.provider_only:
+            # OpenRouter-specific routing knob — pinned providers only, no fallback,
+            # so dev-side variance from cross-provider routing is removed. Other
+            # OpenAI-compatible servers ignore unknown extra_body fields.
+            request_kwargs["extra_body"] = {
+                "provider": {
+                    "only": list(self.provider_only),
+                    "allow_fallbacks": False,
+                }
+            }
+
         try:
-            response = client.chat.completions.create(
-                model=self.model,
-                messages=[{"role": message.role, "content": message.content} for message in messages],
-                temperature=self.temperature
-            )
+            response = client.chat.completions.create(**request_kwargs)
         except APIError as exc:
             raise RuntimeError(f"Model request failed: {exc}") from exc
 

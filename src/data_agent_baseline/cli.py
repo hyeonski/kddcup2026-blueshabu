@@ -21,6 +21,8 @@ from data_agent_baseline.config import (
     ENV_MODEL_API_KEY,
     ENV_MODEL_API_URL,
     ENV_MODEL_NAME,
+    ENV_MODEL_PROVIDER_ONLY,
+    ENV_MODEL_SEED,
     load_app_config,
 )
 from data_agent_baseline.run.runner import TaskRunArtifacts, create_run_output_dir, run_benchmark, run_single_task
@@ -119,17 +121,21 @@ def status(
     model_table.add_column("Item")
     model_table.add_column("Source")
     model_table.add_column("Value")
+    provider_only_value = ",".join(app_config.agent.provider_only)
+    seed_value = "" if app_config.agent.seed is None else str(app_config.agent.seed)
     for env_name, resolved_value, mask in (
         (ENV_MODEL_API_URL, app_config.agent.api_base, False),
         (ENV_MODEL_NAME, app_config.agent.model, False),
         (ENV_MODEL_API_KEY, app_config.agent.api_key, True),
+        (ENV_MODEL_PROVIDER_ONLY, provider_only_value, False),
+        (ENV_MODEL_SEED, seed_value, False),
     ):
         env_present = bool(os.environ.get(env_name, "").strip())
         source = "env" if env_present else ("yaml" if resolved_value else "unset")
         if mask:
             display = f"len={len(resolved_value)}" if resolved_value else "(empty)"
         else:
-            display = resolved_value or "(empty)"
+            display = resolved_value or "(unset)"
         model_table.add_row(env_name, source, display)
     console.print(model_table)
 
