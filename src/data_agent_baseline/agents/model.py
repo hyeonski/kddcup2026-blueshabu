@@ -47,7 +47,7 @@ class OpenAIModelAdapter:
         self.provider_only = tuple(provider_only)
         self.seed = seed
 
-    def complete(self, messages: list[ModelMessage]) -> str:
+    def complete(self, messages: list[ModelMessage] | list[dict[str, str]]) -> str:
         if not self.api_key:
             raise RuntimeError(
                 "Missing model API key. Set MODEL_API_KEY env var (preferred) or agent.api_key in config."
@@ -64,11 +64,17 @@ class OpenAIModelAdapter:
             max_retries=self.max_retries,
         )
 
+        # ModelMessage 또는 dict 형식 모두 수용
+        formatted_messages = []
+        for msg in messages:
+            if isinstance(msg, dict):
+                formatted_messages.append(msg)
+            else:
+                formatted_messages.append({"role": msg.role, "content": msg.content})
+
         request_kwargs: dict[str, Any] = {
             "model": self.model,
-            "messages": [
-                {"role": message.role, "content": message.content} for message in messages
-            ],
+            "messages": formatted_messages,
             "temperature": self.temperature,
         }
         if self.seed is not None:
@@ -96,6 +102,39 @@ class OpenAIModelAdapter:
         if not isinstance(content, str):
             raise RuntimeError("Model response missing text content.")
         return content
+
+
+class ModelAdapterLLMWrapper:
+    """
+    ACON의 HistoryOptimizer는 llm.generate(prompt, temperature=...) 호출을 기대함
+    에이전트의 ModelAdapter는 complete(messages) 메서드를 사용함
+    이 클래스는 둘을 연결해서 ACON 프레임워크가 에이전트의 모델 사용할 수 있게 함.
+    """
+    
+    def __init__(self, model_adapter: ModelAdapter):
+        self.adapter = model_adapter
+    
+    def generate(self, prompt: str, temperature: float = None) -> str:
+        """ACON의 HistoryOptimizer에서 호출하는 메서드
+        
+        None이나 비정상 응답 시 exception을 raise하여 ACON이 압축을 스킵하도록 유도
+        """
+        # ACON의 프롬프트는 사용자 입력이니까 user role로 전달
+        messages = [{"role": "user", "content": prompt}]
+        
+        # temperature 파라미터 전달
+        # OpenAIModelAdapter는 complete()에서 temperature를 지원하지 않기 때문에 adapter.temperature 대신 사용
+        response = self.adapter.complete(messages)
+        
+        # None이나 비정상 응답 시 exception을 raise, exception을 catch하고 압축 스킵
+        if response is None:
+            raise RuntimeError("[ACON LLM] API returned None response - likely API error, rate limit, or service disruption")
+        
+        if not isinstance(response, str):
+            raise RuntimeError(f"[ACON LLM] API returned non-string type {type(response).__name__} instead of str")
+        
+        return response
+
 
 
 class ScriptedModelAdapter:

@@ -36,6 +36,10 @@
    uv sync
    ```
 
+   `uv sync`는 `pyproject.toml`의 `[tool.uv.sources]`에 등록된 path 의존성을 따라
+   `acon-main/`의 `productive-agents` 패키지를 editable 모드로 함께 설치한다.
+   ACON 컨텍스트 최적화(`agent.enable_context_optimization`)를 켜면 이 패키지가 사용된다.
+
 4. Set the model env vars. The grader injects these at evaluation time;
    set them locally for development too. See [Model access](#model-access)
    for provider-specific examples.

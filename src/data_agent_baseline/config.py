@@ -80,6 +80,9 @@ class AgentConfig:
     safety_margin_seconds: float = 30.0
     provider_only: tuple[str, ...] = ()
     seed: int | None = None
+    # ACON Context Optimization
+    enable_context_optimization: bool = False
+    history_summarization_threshold: int = 4000
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,6 +136,8 @@ def load_app_config(config_path: Path) -> AppConfig:
         safety_margin_seconds=float(agent_payload.get("safety_margin_seconds", agent_defaults.safety_margin_seconds)),
         provider_only=provider_only,
         seed=seed_value,
+        enable_context_optimization=bool(agent_payload.get("enable_context_optimization", agent_defaults.enable_context_optimization)),
+        history_summarization_threshold=int(agent_payload.get("history_summarization_threshold", agent_defaults.history_summarization_threshold)),
     )
     raw_run_id = run_payload.get("run_id")
     run_id = run_defaults.run_id

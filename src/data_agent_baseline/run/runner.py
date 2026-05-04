@@ -91,6 +91,8 @@ def _build_react_config(config: AppConfig) -> ReActAgentConfig:
         max_steps=config.agent.max_steps,
         wall_budget_seconds=_resolve_wall_budget(config),
         safety_margin_seconds=config.agent.safety_margin_seconds,
+        enable_context_optimization=config.agent.enable_context_optimization,
+        history_summarization_threshold=config.agent.history_summarization_threshold,
     )
 
 
