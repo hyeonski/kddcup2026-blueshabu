@@ -9,6 +9,8 @@ import yaml
 ENV_MODEL_API_URL = "MODEL_API_URL"
 ENV_MODEL_API_KEY = "MODEL_API_KEY"
 ENV_MODEL_NAME = "MODEL_NAME"
+ENV_MODEL_PROVIDER_ONLY = "MODEL_PROVIDER_ONLY"
+ENV_MODEL_SEED = "MODEL_SEED"
 
 
 def _resolve_str(env_name: str, yaml_value: object, default: str) -> str:
@@ -19,6 +21,37 @@ def _resolve_str(env_name: str, yaml_value: object, default: str) -> str:
         return default
     text = str(yaml_value)
     return text if text else default
+
+
+def _resolve_provider_only(yaml_value: object, default: tuple[str, ...]) -> tuple[str, ...]:
+    """Resolve OpenRouter provider allow-list. env > yaml > default. CSV format."""
+    env_value = os.environ.get(ENV_MODEL_PROVIDER_ONLY, "").strip()
+    if env_value:
+        return tuple(item.strip() for item in env_value.split(",") if item.strip())
+    if yaml_value is None:
+        return default
+    if isinstance(yaml_value, (list, tuple)):
+        return tuple(str(item).strip() for item in yaml_value if str(item).strip())
+    text = str(yaml_value).strip()
+    if not text:
+        return default
+    return tuple(item.strip() for item in text.split(",") if item.strip())
+
+
+def _resolve_seed(yaml_value: object, default: int | None) -> int | None:
+    """Resolve sampling seed. env > yaml > default."""
+    env_value = os.environ.get(ENV_MODEL_SEED, "").strip()
+    if env_value:
+        try:
+            return int(env_value)
+        except ValueError:
+            return default
+    if yaml_value is None:
+        return default
+    try:
+        return int(yaml_value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return default
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -45,6 +78,8 @@ class AgentConfig:
     temperature: float = 0.0
     wall_budget_seconds: float | None = None
     safety_margin_seconds: float = 30.0
+    provider_only: tuple[str, ...] = ()
+    seed: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,6 +121,8 @@ def load_app_config(config_path: Path) -> AppConfig:
     )
     raw_wall_budget = agent_payload.get("wall_budget_seconds", agent_defaults.wall_budget_seconds)
     wall_budget_value = float(raw_wall_budget) if raw_wall_budget is not None else None
+    provider_only = _resolve_provider_only(agent_payload.get("provider_only"), agent_defaults.provider_only)
+    seed_value = _resolve_seed(agent_payload.get("seed"), agent_defaults.seed)
     agent_config = AgentConfig(
         model=_resolve_str(ENV_MODEL_NAME, agent_payload.get("model"), agent_defaults.model),
         api_base=_resolve_str(ENV_MODEL_API_URL, agent_payload.get("api_base"), agent_defaults.api_base),
@@ -94,6 +131,8 @@ def load_app_config(config_path: Path) -> AppConfig:
         temperature=float(agent_payload.get("temperature", agent_defaults.temperature)),
         wall_budget_seconds=wall_budget_value,
         safety_margin_seconds=float(agent_payload.get("safety_margin_seconds", agent_defaults.safety_margin_seconds)),
+        provider_only=provider_only,
+        seed=seed_value,
     )
     raw_run_id = run_payload.get("run_id")
     run_id = run_defaults.run_id

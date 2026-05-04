@@ -72,6 +72,8 @@ def build_model_adapter(config: AppConfig):
         api_base=config.agent.api_base,
         api_key=config.agent.api_key,
         temperature=config.agent.temperature,
+        provider_only=config.agent.provider_only,
+        seed=config.agent.seed,
     )
 
 
