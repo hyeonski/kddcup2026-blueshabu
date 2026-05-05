@@ -38,11 +38,27 @@ PY
 echo "[entrypoint] effective config:"
 cat "$TMP_CFG"
 
-dabench run-benchmark --config "$TMP_CFG"
+# /logs is mounted rw by the evaluation system per rules §3.4. We use it to
+# preserve stdout/stderr and per-task ReAct traces so post-eval debugging is
+# possible — scoring still only reads /output/task_<id>/prediction.csv.
+LOGS_DIR="${LOGS_DIR:-/logs}"
+if [ -d "$LOGS_DIR" ] && [ -w "$LOGS_DIR" ]; then
+  cp "$TMP_CFG" "$LOGS_DIR/effective_config.yaml" || true
+  RUN_LOG="$LOGS_DIR/run.log"
+else
+  RUN_LOG="/tmp/run.log"
+fi
+
+echo "[entrypoint] $ dabench run-benchmark --config $TMP_CFG  (tee → $RUN_LOG)"
+set +e
+dabench run-benchmark --config "$TMP_CFG" 2>&1 | tee "$RUN_LOG"
+RC=${PIPESTATUS[0]}
+set -e
+echo "[entrypoint] dabench exit code: $RC"
 
 RUN_DIR="$RUN_OUTPUT_ROOT/$RUN_ID"
 if [ ! -d "$RUN_DIR" ]; then
-  echo "[entrypoint] FATAL: expected run dir $RUN_DIR missing" >&2
+  echo "[entrypoint] FATAL: expected run dir $RUN_DIR missing (rc=$RC)" >&2
   exit 3
 fi
 
@@ -57,3 +73,17 @@ for src_csv in "$RUN_DIR"/task_*/prediction.csv; do
   copied=$((copied + 1))
 done
 echo "[entrypoint] wrote $copied prediction.csv files"
+
+# Preserve per-task traces and the run summary in /logs for post-eval debugging.
+if [ -d "$LOGS_DIR" ] && [ -w "$LOGS_DIR" ]; then
+  trace_count=0
+  mkdir -p "$LOGS_DIR/traces"
+  for trace in "$RUN_DIR"/task_*/trace.json; do
+    [ -e "$trace" ] || continue
+    task_dir="$(basename "$(dirname "$trace")")"
+    cp "$trace" "$LOGS_DIR/traces/${task_dir}.trace.json" || true
+    trace_count=$((trace_count + 1))
+  done
+  cp "$RUN_DIR/summary.json" "$LOGS_DIR/summary.json" 2>/dev/null || true
+  echo "[entrypoint] copied $trace_count traces + summary into $LOGS_DIR"
+fi
