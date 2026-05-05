@@ -372,6 +372,103 @@ Benchmark runs also write:
 artifacts/runs/<run_id>/summary.json
 ```
 
+## Submission (Docker)
+
+KDD Cup 2026 평가는 [`dataagent.top/rules`](https://dataagent.top/rules) §3.4 에
+정의된 형식의 컨테이너로 진행된다. 평가 시스템은 다음 계약만 본다:
+
+- **읽기**: `/input/task_<id>/...`
+- **쓰기**: `/output/task_<id>/prediction.csv`
+- **환경변수**: `MODEL_API_URL`, `MODEL_API_KEY`, `MODEL_NAME` (LLM 서비스 주소·키·모델명)
+
+이 저장소는 위 계약을 만족하는 얇은 엔트리포인트와 amd64 Dockerfile을 함께
+제공한다. 코드 자체는 이 세 환경변수를 이미 우선순위 1로 사용한다
+([config.py](src/data_agent_baseline/config.py)).
+
+### 1. 빌드
+
+```bash
+# 제출용 (linux/amd64) — 자동으로 docker save | gzip 까지 실행
+bash scripts/make_submission.sh team1113 1
+# → team1113:v1 이미지 + team1113_v1.tar.gz (≈ 300MB)
+
+# (Apple Silicon 로컬 테스트용) arm64 네이티브 빌드
+docker buildx build --platform linux/arm64 -t team1113:smoke --load .
+```
+
+`<team_id>` 는 운영진이 등록 직후 부여한 식별자(`teamNNNN`)와 정확히
+일치해야 한다. `<N>` 은 제출 회차 (1부터 증가).
+
+### 2. 룰 형식 그대로 실행해 보기
+
+[`scripts/test_run.sh`](scripts/test_run.sh) 가 §3.4 의 두 단계
+(`docker load` → `docker run`) 를 그대로 수행한다. 로컬 사정상 다음
+4가지가 룰 원문과 다르다:
+
+| 항목 | 룰 | test_run.sh | 이유 |
+|---|---|---|---|
+| `--network=eval_net` | 있음 | 없음 | eval_net 은 평가 클러스터 내부망 — 로컬은 OpenRouter 외부망 필요 |
+| `--cpus`, `--memory` | `16` / `64g` 고정 | `$CPUS`, `$MEMORY` 변수 (기본값 동일) | 호스트 자원이 부족할 때 override |
+| `-e KEY=VAL` 3 개 | 명시 | `--env-file` | 키를 셸 히스토리에 노출 안 시키려고 |
+| `--platform` | (eval 호스트가 amd64 라 불필요) | 명시 | Apple Silicon 빌드 매트릭스 |
+
+```bash
+# 환경변수 파일 준비 (값에 따옴표 X)
+cat > artifacts/smoke/docker.env <<EOF
+MODEL_API_URL=https://openrouter.ai/api/v1
+MODEL_API_KEY=sk-or-v1-...
+MODEL_NAME=qwen/qwen3.5-35b-a3b
+EOF
+
+# Apple Silicon
+TEAM_ID=team1113 IMAGE_TAG=team1113:smoke \
+PLATFORM=linux/arm64 CPUS=8 MEMORY=16g \
+INPUT_DIR="$(pwd)/data/public/input" \
+bash scripts/test_run.sh
+
+# linux/amd64 호스트 (실제 평가환경과 동일)
+TEAM_ID=team1113 IMAGE_TAG=team1113:v1 \
+INPUT_DIR="$(pwd)/data/public/input" \
+bash scripts/test_run.sh
+```
+
+성공하면 `artifacts/eval/<submission_id>/output/task_<id>/prediction.csv` 가
+모든 입력 태스크에 대해 생성된다.
+
+### 3. 파일 흐름
+
+평가 시스템은 `/input` 에 모든 태스크를 한꺼번에 마운트한다.
+[`docker/entrypoint.sh`](docker/entrypoint.sh) 는 다음을 수행한다:
+
+1. `/app/configs/submission.yaml` 의 `dataset.root_path` 를 `/input` 으로,
+   `run.output_dir` 을 `/tmp/runs` 로 덮어 쓴 임시 config 를 만들고
+2. `dabench run-benchmark` 로 모든 `task_<id>` 를 처리한 뒤
+3. `/tmp/runs/submission/task_<id>/prediction.csv` 를
+   `/output/task_<id>/prediction.csv` 로 평탄화 복사한다 (한 단계 얕게).
+
+`trace.json`, `summary.json`, 체크포인트는 `/output` 으로 복사하지 않는다 —
+룰은 `prediction.csv` 만 채점한다.
+
+### 4. 제출
+
+1. `team1113_v1.tar.gz` 를 Google Drive 에 업로드 → "링크가 있는 모든
+   사용자: 뷰어" 로 공유
+2. 운영진 메일로 발송
+   - 제목: `[KDDCup2026 Data Agents] Submission - team1113 - v1`
+   - 본문: 팀 ID, 버전, 공유 링크
+
+`Phase 1` 일일 1회 / 총 30회 / 12 시간 합산 wall-clock 제한이 있다 ([rules](https://dataagent.top/rules) §3).
+
+### 5. 룰 적합성 체크리스트
+
+- [x] 이미지 이름 `<team_id>:v<N>`, 아카이브 `<team_id>_v<N>.tar.gz`
+      (콜론을 언더스코어로) — `make_submission.sh` 가 자동 처리
+- [x] linux/amd64 (10 GB 이내, 현재 ≈ 300 MB)
+- [x] `docker save … | gzip` 으로 생성된 tar.gz
+- [x] `MODEL_API_URL/KEY/NAME` 을 코드에 하드코딩하지 않음 (env 우선)
+- [x] `/input` 미수정, `/output/task_<id>/prediction.csv` 만 기록
+- [x] 외부 LLM 호출은 평가 단계에서 차단됨 — Qwen3.5-35B-A3B 만 호출
+
 ## Contact
 
 - Open issues: https://github.com/HKUSTDial/kddcup2026-data-agents-starter-kit/issues
