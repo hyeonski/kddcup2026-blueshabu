@@ -126,6 +126,9 @@ class ReActAgent:
         # ACON HistoryOptimizer 초기화
         self.history_optimizer: Any = None
         self.compressed_history: str | None = None
+        # 마지막 K turn 보존
+        self.preserve_last_k_turns: int = 3  # ACON 디폴트
+        self.preserved_steps: list[StepRecord] = []  # 마지막 K turn 보존할 steps
         
         if self.config.enable_context_optimization and ACONHistoryOptimizer is not None:
             try:
@@ -165,29 +168,35 @@ class ReActAgent:
 
 
     def _build_messages(self, task: PublicTask, state: AgentRuntimeState) -> list[ModelMessage]:
-        """Build messages for model. Include compressed history if available."""
+        """Build messages for model. Only include preserved last K turns."""
         system_content = build_system_prompt(
             self.tools.describe_for_prompt(),
             system_prompt=self.system_prompt,
         )
         messages = [ModelMessage(role="system", content=system_content)]
-        messages.append(ModelMessage(role="user", content=build_task_prompt(task)))
         
-        # 압축된 history가 있으면 포함
+        # Task + Compressed History를 하나의 user 메시지로
+        task_content = build_task_prompt(task)
         if self.compressed_history:
-            messages.append(
-                ModelMessage(
-                    role="user",
-                    content=f"[Previous context summary]\n{self.compressed_history}"
-                )
-            )
+            task_content += f"\n\n<HISTORY_SUMMARY>\n{self.compressed_history}\n</HISTORY_SUMMARY>"
+        messages.append(ModelMessage(role="user", content=task_content))
         
-        # 현재 steps 추가
-        for step in state.steps:
+        # 보존된 steps + 그 이후의 새로운 steps 추가
+        if self.preserved_steps:
+            # 보존된 steps 이후의 모든 새 steps 찾기
+            last_preserved_step_idx = self.preserved_steps[-1].step_index
+            new_steps_after_compression = [s for s in state.steps if s.step_index > last_preserved_step_idx]
+            steps_to_add = self.preserved_steps + new_steps_after_compression
+        else:
+            # 압축 전: 모든 steps 사용
+            steps_to_add = state.steps
+        
+        for step in steps_to_add:
             messages.append(ModelMessage(role="assistant", content=step.raw_response))
             messages.append(
                 ModelMessage(role="user", content=build_observation_prompt(step.observation))
             )
+        
         return messages
 
     def _complete_with_parse_recovery(
@@ -240,29 +249,50 @@ class ReActAgent:
             pass
 
     def _try_compress_history(self, task: PublicTask, state: AgentRuntimeState) -> None:
-        """ACON HistoryOptimizer를 사용해 history 압축"""
+        """ACON 방식으로 history 압축: 마지막 K turn 이전만 압축"""
         if not self.history_optimizer or not state.steps:
             return
         
-        step_count = len(state.steps)
         task_id = task.task_id if hasattr(task, 'task_id') else "unknown"
         
-        # History를 텍스트 포맷으로 변환
-        history_text = self._format_steps_for_compression(state.steps)
-        current_len_chars = len(history_text)
-        current_len_with_summary = len((self.compressed_history or "") + history_text)
+        # Step 1: 마지막 K turn 분리
+        # 각 turn = assistant response + user observation
+        preserve_steps_count = self.preserve_last_k_turns * 2
         
-        # ACON의 check_summarization_needed 호출
+        if len(state.steps) <= preserve_steps_count:
+            # 아직 충분한 step이 없으면 압축 불필요
+            self.preserved_steps = state.steps
+            return
+        
+        steps_for_compression = state.steps[:-preserve_steps_count]
+        self.preserved_steps = state.steps[-preserve_steps_count:]
+        
+        # Step 2: 보존할 steps 이전 것만 압축
+        history_text = self._format_steps_for_compression(steps_for_compression)
+        if not history_text.strip():
+            return
+        
+        # Step 3: 압축 필요 여부 확인
         needs_compression = self.history_optimizer.check_summarization_needed(
             history_text, self.compressed_history
         )
         
         if not needs_compression:
+            print(f"[{task_id}] ⏭️  Context compression skipped (threshold not met)")
             return
         
-        # ACON의 process() 호출
-        # 파라미터: task, history (formatting된 텍스트), prev_history_summary
+        # Step 4: 압축 수행
         try:
+            compression_start_idx = steps_for_compression[0].step_index if steps_for_compression else 0
+            compression_end_idx = steps_for_compression[-1].step_index if steps_for_compression else 0
+            preserve_start_idx = self.preserved_steps[0].step_index if self.preserved_steps else 0
+            preserve_end_idx = self.preserved_steps[-1].step_index if self.preserved_steps else 0
+            
+            print(f"[{task_id}] 🔄 Context compression START")
+            print(f"  - Compressing steps: [{compression_start_idx} ~ {compression_end_idx}] ({len(steps_for_compression)} steps)")
+            print(f"  - Preserving steps: [{preserve_start_idx} ~ {preserve_end_idx}] ({len(self.preserved_steps)} steps)")
+            print(f"  - History text size: {len(history_text)} chars, prev summary size: {len(self.compressed_history or '')} chars")
+            
             compressed = self.history_optimizer.process(
                 task=task.question,
                 history=history_text,
@@ -271,17 +301,42 @@ class ReActAgent:
                 opt_args={}
             )
             
-            # process()는 (summary, index)를 반환하는데, 첫 번째만 사용함
             if isinstance(compressed, tuple):
                 compressed_text = compressed[0]
             else:
                 compressed_text = compressed
             
             if compressed_text:
+                old_summary_len = len(self.compressed_history or "")
                 self.compressed_history = compressed_text
+                print(f"  ✅ Context compression SUCCESS")
+                print(f"  - Compressed summary size: {len(compressed_text)} chars (prev: {old_summary_len} chars)")
+                
+                # 압축 전후 샘플 표시 (최대 1000자)
+                print(f"\n  📋 Compression Details (up to 1000 chars):")
+                
+                # 압축 전 샘플 (최대 500자)
+                history_sample = history_text[:500]
+                if len(history_text) > 500:
+                    history_sample += f"\n... ({len(history_text) - 500} more chars)"
+                print(f"  [BEFORE - Original History]")
+                print(f"  {history_sample}")
+                
+                # 압축 후 샘플 (최대 500자)
+                compressed_sample = compressed_text[:500]
+                if len(compressed_text) > 500:
+                    compressed_sample += f"\n... ({len(compressed_text) - 500} more chars)"
+                print(f"  [AFTER - Compressed Summary]")
+                print(f"  {compressed_sample}")
+                
+                print(f"  ─" * 50 + "\n")
+            else:
+                print(f"  ❌ Context compression FAILED: empty result")
                 
         except Exception as e:
-            pass
+            print(f"  ❌ Context compression FAILED: {e}")
+            import traceback
+            self.logger.debug(traceback.format_exc())
 
     def _format_steps_for_compression(self, steps: list[StepRecord]) -> str:
         """ACON HistoryOptimizer에 전달할 형식으로 steps를 포맷"""
@@ -314,6 +369,22 @@ class ReActAgent:
                 )
                 break
             base_messages = self._build_messages(task, state)
+            
+            # 현재 메시지 구성 상태
+            task_id = task.task_id if hasattr(task, 'task_id') else "unknown"
+            if self.preserved_steps:
+                preserved_range = f"[{self.preserved_steps[0].step_index} ~ {self.preserved_steps[-1].step_index}]"
+                print(f"[{task_id}] 📨 Building messages: {len(base_messages)} messages, "
+                      f"preserved steps: {preserved_range} ({len(self.preserved_steps)} steps), "
+                      f"compressed_history: {'YES' if self.compressed_history else 'NO'}")
+            else:
+                if state.steps:
+                    steps_range = f"[{state.steps[0].step_index} ~ {state.steps[-1].step_index}]"
+                    print(f"[{task_id}] 📨 Building messages: {len(base_messages)} messages, "
+                          f"all steps: {steps_range} ({len(state.steps)} steps)")
+                else:
+                    print(f"[{task_id}] 📨 Building messages: {len(base_messages)} messages (no steps yet)")
+            
             model_step, raw_response, parse_error = self._complete_with_parse_recovery(base_messages)
             if model_step is None:
                 state.steps.append(

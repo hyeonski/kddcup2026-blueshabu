@@ -1,1 +1,0 @@
-INTRO = "system: used when you want to switch between apps."
