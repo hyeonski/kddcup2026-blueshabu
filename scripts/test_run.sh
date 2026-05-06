@@ -15,7 +15,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-TEAM_ID="${TEAM_ID:-blueshabu}"
+TEAM_ID="${TEAM_ID:-team1113}"
 VERSION="${VERSION:-1}"
 IMAGE_TAG="${IMAGE_TAG:-${TEAM_ID}:v${VERSION}}"
 TARBALL="${TARBALL:-${TEAM_ID}_v${VERSION}.tar.gz}"

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-TEAM_ID="${1:-blueshabu}"
+TEAM_ID="${1:-team1113}"
 VERSION_NUM="${2:-1}"
 TAG="${TEAM_ID}:v${VERSION_NUM}"
 OUT="${TEAM_ID}_v${VERSION_NUM}.tar.gz"

@@ -44,7 +44,7 @@ cat "$TMP_CFG"
 LOGS_DIR="${LOGS_DIR:-/logs}"
 if [ -d "$LOGS_DIR" ] && [ -w "$LOGS_DIR" ]; then
   cp "$TMP_CFG" "$LOGS_DIR/effective_config.yaml" || true
-  RUN_LOG="$LOGS_DIR/run.log"
+  RUN_LOG="$LOGS_DIR/runtime.log"
 else
   RUN_LOG="/tmp/run.log"
 fi
