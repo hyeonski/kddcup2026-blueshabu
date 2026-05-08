@@ -127,7 +127,7 @@ class ReActAgent:
         self.history_optimizer: Any = None
         self.compressed_history: str | None = None
         # 마지막 K turn 보존
-        self.preserve_last_k_turns: int = 3  # ACON 디폴트
+        self.preserve_last_k_turns: int = 5  # ACON 디폴트
         self.preserved_steps: list[StepRecord] = []  # 마지막 K turn 보존할 steps
         
         if self.config.enable_context_optimization and ACONHistoryOptimizer is not None:
@@ -278,7 +278,6 @@ class ReActAgent:
         )
         
         if not needs_compression:
-            print(f"[{task_id}] ⏭️  Context compression skipped (threshold not met)")
             return
         
         # Step 4: 압축 수행
@@ -287,11 +286,6 @@ class ReActAgent:
             compression_end_idx = steps_for_compression[-1].step_index if steps_for_compression else 0
             preserve_start_idx = self.preserved_steps[0].step_index if self.preserved_steps else 0
             preserve_end_idx = self.preserved_steps[-1].step_index if self.preserved_steps else 0
-            
-            print(f"[{task_id}] 🔄 Context compression START")
-            print(f"  - Compressing steps: [{compression_start_idx} ~ {compression_end_idx}] ({len(steps_for_compression)} steps)")
-            print(f"  - Preserving steps: [{preserve_start_idx} ~ {preserve_end_idx}] ({len(self.preserved_steps)} steps)")
-            print(f"  - History text size: {len(history_text)} chars, prev summary size: {len(self.compressed_history or '')} chars")
             
             compressed = self.history_optimizer.process(
                 task=task.question,
@@ -307,34 +301,9 @@ class ReActAgent:
                 compressed_text = compressed
             
             if compressed_text:
-                old_summary_len = len(self.compressed_history or "")
                 self.compressed_history = compressed_text
-                print(f"  ✅ Context compression SUCCESS")
-                print(f"  - Compressed summary size: {len(compressed_text)} chars (prev: {old_summary_len} chars)")
-                
-                # 압축 전후 샘플 표시 (최대 1000자)
-                print(f"\n  📋 Compression Details (up to 1000 chars):")
-                
-                # 압축 전 샘플 (최대 500자)
-                history_sample = history_text[:500]
-                if len(history_text) > 500:
-                    history_sample += f"\n... ({len(history_text) - 500} more chars)"
-                print(f"  [BEFORE - Original History]")
-                print(f"  {history_sample}")
-                
-                # 압축 후 샘플 (최대 500자)
-                compressed_sample = compressed_text[:500]
-                if len(compressed_text) > 500:
-                    compressed_sample += f"\n... ({len(compressed_text) - 500} more chars)"
-                print(f"  [AFTER - Compressed Summary]")
-                print(f"  {compressed_sample}")
-                
-                print(f"  ─" * 50 + "\n")
-            else:
-                print(f"  ❌ Context compression FAILED: empty result")
                 
         except Exception as e:
-            print(f"  ❌ Context compression FAILED: {e}")
             import traceback
             self.logger.debug(traceback.format_exc())
 
@@ -369,21 +338,6 @@ class ReActAgent:
                 )
                 break
             base_messages = self._build_messages(task, state)
-            
-            # 현재 메시지 구성 상태
-            task_id = task.task_id if hasattr(task, 'task_id') else "unknown"
-            if self.preserved_steps:
-                preserved_range = f"[{self.preserved_steps[0].step_index} ~ {self.preserved_steps[-1].step_index}]"
-                print(f"[{task_id}] 📨 Building messages: {len(base_messages)} messages, "
-                      f"preserved steps: {preserved_range} ({len(self.preserved_steps)} steps), "
-                      f"compressed_history: {'YES' if self.compressed_history else 'NO'}")
-            else:
-                if state.steps:
-                    steps_range = f"[{state.steps[0].step_index} ~ {state.steps[-1].step_index}]"
-                    print(f"[{task_id}] 📨 Building messages: {len(base_messages)} messages, "
-                          f"all steps: {steps_range} ({len(state.steps)} steps)")
-                else:
-                    print(f"[{task_id}] 📨 Building messages: {len(base_messages)} messages (no steps yet)")
             
             model_step, raw_response, parse_error = self._complete_with_parse_recovery(base_messages)
             if model_step is None:
