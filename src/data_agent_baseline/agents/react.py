@@ -171,13 +171,7 @@ class ReActAgent:
                 self.logger.warning(traceback.format_exc())
                 self.history_optimizer = None
 
-    def _ps_step_print(self, task_id: str, step_id: int, action_desc: str, ok: bool, detail: str = "") -> None:
-        status = "성공" if ok else "실패"
-        message = f"[{task_id}] - [{step_id}] - {action_desc} ({status})"
-        if detail:
-            message += f" | {detail}"
-        print(message, flush=True)
-
+    
     def _has_retry_budget(self, started_at: float) -> bool:
         budget = self.config.wall_budget_seconds
         if budget is None:
@@ -248,13 +242,6 @@ class ReActAgent:
                 return parse_model_step(last_raw_response), last_raw_response, None
             except Exception as exc:  # noqa: BLE001 — surface any parse failure
                 last_error = str(exc)
-                self._ps_step_print(
-                    task_id,
-                    step_id,
-                    "응답 파싱",
-                    False,
-                    f"attempt={attempt + 1}/{self.config.parse_retries + 1}, error={last_error}",
-                )
                 if attempt == self.config.parse_retries:
                     break
                 messages = messages + [
@@ -289,10 +276,6 @@ class ReActAgent:
 
     def _try_compress_history(self, task: PublicTask, state: AgentRuntimeState, step_id: int) -> None:
         """ACON 방식으로 history 압축: 마지막 K step 이전만 압축"""
-        if not self.history_optimizer or not state.steps:
-            self._ps_step_print(task.task_id, step_id, "히스토리 압축", False, "history optimizer unavailable or no steps")
-            return
-        
         task_id = task.task_id if hasattr(task, 'task_id') else "unknown"
         
         # Step 1: 마지막 K step 분리
@@ -301,13 +284,6 @@ class ReActAgent:
         if len(state.steps) <= preserve_steps_count:
             # 아직 충분한 step이 없으면 압축 불필요
             self.preserved_steps = state.steps
-            self._ps_step_print(
-                task.task_id,
-                step_id,
-                "히스토리 압축",
-                False,
-                f"steps={len(state.steps)} <= preserve_count={preserve_steps_count}",
-            )
             return
         
         steps_for_compression = state.steps[:-preserve_steps_count]
@@ -316,7 +292,6 @@ class ReActAgent:
         # Step 2: 보존할 steps 이전 것만 압축
         history_text = self._format_steps_for_compression(steps_for_compression)
         if not history_text.strip():
-            self._ps_step_print(task.task_id, step_id, "히스토리 압축", False, "empty history text")
             return
         
         # Step 3: 압축 필요 여부 확인
@@ -325,7 +300,6 @@ class ReActAgent:
         )
         
         if not needs_compression:
-            self._ps_step_print(task.task_id, step_id, "히스토리 압축", False, "threshold not reached")
             return
         
         # Step 4: 압축 수행
@@ -350,16 +324,8 @@ class ReActAgent:
             
             if compressed_text:
                 self.compressed_history = compressed_text
-                self._ps_step_print(
-                    task.task_id,
-                    step_id,
-                    "히스토리 압축",
-                    True,
-                    f"compressed_steps={len(steps_for_compression)}, preserved_steps={len(self.preserved_steps)}",
-                )
                 
         except Exception as e:
-            self._ps_step_print(task.task_id, step_id, "히스토리 압축", False, f"error={e}")
             import traceback
             self.logger.debug(traceback.format_exc())
 
@@ -397,24 +363,15 @@ class ReActAgent:
         budget = self.config.wall_budget_seconds
         margin = self.config.safety_margin_seconds
         for step_index in range(1, self.config.max_steps + 1):
-            self._ps_step_print(task.task_id, step_index, "step 시작", True)
             if budget is not None and (perf_counter() - started_at) > max(budget - margin, 0.0):
                 state.failure_reason = (
                     f"Wall budget reached after step {step_index - 1} (budget={budget}s, margin={margin}s)."
                 )
-                self._ps_step_print(task.task_id, step_index, "wall budget 확인", False, "budget reached")
                 break
             base_messages = self._build_messages(task, state)
             
             model_step, raw_response, parse_error = self._complete_with_parse_recovery(task.task_id, base_messages, step_index)
             if model_step is None:
-                self._ps_step_print(
-                    task.task_id,
-                    step_index,
-                    "plan 생성 및 응답 파싱",
-                    False,
-                    f"error={parse_error or 'parse failed'}",
-                )
                 state.steps.append(
                     StepRecord(
                         step_index=step_index,
@@ -432,13 +389,7 @@ class ReActAgent:
             plan_preview = model_step.plan.strip().replace("\n", " / ")
             if len(plan_preview) > 140:
                 plan_preview = plan_preview[:140] + "..."
-            self._ps_step_print(
-                task.task_id,
-                step_index,
-                "plan 생성 및 응답 파싱",
-                True,
-                f"action={model_step.action}, plan={plan_preview if plan_preview else '(없음)'}",
-            )
+
             try:
                 tool_result = self.tools.execute(task, model_step.action, model_step.action_input)
                 observation = {
@@ -468,23 +419,14 @@ class ReActAgent:
                     plan=model_step.plan,  # Plan-and-Solve: LLM으로부터 받은 계획 저장
                 )
                 state.steps.append(step_record)
-                self._ps_step_print(
-                    task.task_id,
-                    step_index,
-                    f"tool 실행({model_step.action})",
-                    tool_result.ok and not retry_empty_answer,
-                    f"terminal={tool_result.is_terminal}",
-                )
                 
                 if tool_result.is_terminal:
                     if retry_empty_answer:
-                        self._ps_step_print(task.task_id, step_index, "빈 답안 재추론", False, "rows=0; retrying with remaining budget")
                         self._try_compress_history(task, state, step_index)
                         self._flush_checkpoint(task, state, checkpoint_writer)
                         continue
                     # Accept terminal answer as-is (no programmatic schema validation)
                     state.answer = tool_result.answer
-                    self._ps_step_print(task.task_id, step_index, "최종 답변 제출", True)
                     self._flush_checkpoint(task, state, checkpoint_writer)
                     break
                 
@@ -493,7 +435,6 @@ class ReActAgent:
                 
                 self._flush_checkpoint(task, state, checkpoint_writer)
             except Exception as exc:
-                self._ps_step_print(task.task_id, step_index, f"tool 실행({model_step.action})", False, f"error={exc}")
                 observation = {
                     "ok": False,
                     "error": str(exc),
@@ -513,7 +454,6 @@ class ReActAgent:
                 self._flush_checkpoint(task, state, checkpoint_writer)
 
         if state.answer is None and state.steps:
-            self._ps_step_print(task.task_id, state.steps[-1].step_index, "강제 답변 단계 진입", True)
             self._attempt_forced_answer(task, state, checkpoint_writer)
 
         if state.answer is None and state.failure_reason is None:
@@ -533,13 +473,11 @@ class ReActAgent:
         checkpoint_writer: CheckpointWriter | None,
     ) -> None:
         forced_index = (state.steps[-1].step_index if state.steps else 0) + 1
-        self._ps_step_print(task.task_id, forced_index, "강제 답변 프롬프트 전송", True)
         base_messages = self._build_messages(task, state)
         forced_messages = base_messages + [ModelMessage(role="user", content=_FORCE_ANSWER_HINT)]
         try:
             model_step, raw_response, parse_error = self._complete_with_parse_recovery(task.task_id, forced_messages, forced_index)
         except Exception as exc:  # noqa: BLE001
-            self._ps_step_print(task.task_id, forced_index, "강제 답변 생성", False, f"error={exc}")
             state.steps.append(
                 StepRecord(
                     step_index=forced_index,
@@ -556,13 +494,6 @@ class ReActAgent:
             return
 
         if model_step is None:
-            self._ps_step_print(
-                task.task_id,
-                forced_index,
-                "강제 답변 생성",
-                False,
-                f"error={parse_error or 'parse failed'}",
-            )
             state.steps.append(
                 StepRecord(
                     step_index=forced_index,
@@ -579,7 +510,6 @@ class ReActAgent:
             return
 
         if model_step.action != "answer":
-            self._ps_step_print(task.task_id, forced_index, "강제 답변 액션 검증", False, f"action={model_step.action}")
             state.steps.append(
                 StepRecord(
                     step_index=forced_index,
@@ -598,7 +528,6 @@ class ReActAgent:
         try:
             tool_result = self.tools.execute(task, model_step.action, model_step.action_input)
         except Exception as exc:  # noqa: BLE001
-            self._ps_step_print(task.task_id, forced_index, "강제 답변 제출", False, f"error={exc}")
             state.steps.append(
                 StepRecord(
                     step_index=forced_index,
@@ -615,7 +544,6 @@ class ReActAgent:
             return
 
         observation = {"ok": tool_result.ok, "tool": "answer (forced)", "content": tool_result.content}
-        self._ps_step_print(task.task_id, forced_index, "강제 답변 제출", tool_result.ok)
         state.steps.append(
             StepRecord(
                 step_index=forced_index,

@@ -11,7 +11,8 @@ try:
     from termcolor import cprint
 except ImportError:
     def cprint(text, color=None):
-        print(text)
+        # debug print removed per user request
+        return None
 
 from .base import BaseContextOptimizer
 
@@ -106,9 +107,6 @@ class HistoryOptimizer(BaseContextOptimizer):
         )
         
         # Generate summary
-        # if self.debug_mode:
-        #     cprint("History Optimization Prompt", 'red')
-        #     cprint(prompt, 'blue')
         if self.use_llmlingua:
             if prev_history_summary:
                 _history = prev_history_summary + history
@@ -154,9 +152,8 @@ class HistoryOptimizer(BaseContextOptimizer):
         n_tokens = self.count_tokens(history_text)
         
         if self.debug_mode:
-            print(" ########### History summarization criterion check ###########")
-            print(f"        History length: {n_tokens}")
-            print(f"        History summarization threshold: {self.history_summarization_threshold}")
+            # debug prints removed per user request
+            pass
             
         return n_tokens > self.history_summarization_threshold
     
@@ -209,8 +206,8 @@ class HistoryOptimizer(BaseContextOptimizer):
         
         with open(history_file, 'w') as f:
             json.dump(self.history, f, indent=2)
-        
-        print(f"History optimizer history dumped to {history_file}")
+        # debug print removed per user request
+        return None
 
 
 class HistoryOptimizerV2(HistoryOptimizer):
@@ -270,9 +267,6 @@ class HistoryOptimizerV2(HistoryOptimizer):
         )
         
         # Generate summary
-        # if self.debug_mode:
-        #     cprint("History Optimization Prompt", 'red')
-        #     cprint(prompt, 'blue')
         raw_response = self.llm.generate(prompt, temperature=self.temperature)
         raw_response = raw_response.strip()
 
@@ -330,7 +324,8 @@ try:
 except ImportError:
     cosine_similarity = None
     np = None
-    print("Please install scikit-learn and numpy for HistoryRetriever functionality.")
+    # debug print removed per user request
+    pass
 
 class HistoryRetriever(HistoryOptimizer):
     """
@@ -405,7 +400,6 @@ class HistoryRetriever(HistoryOptimizer):
             history_text_list_to_embed = history_text_list[len(self.embedding_cache):]
             new_embeddings = self.embedding_model.embed_documents(history_text_list_to_embed)            
             self.embedding_cache.extend(new_embeddings)
-        # print("#######  Len of embedding cache:", len(self.embedding_cache))
         query_embedding = self.embedding_model.embed_query(query)
 
         # similarity search
@@ -417,7 +411,8 @@ class HistoryRetriever(HistoryOptimizer):
         top_indices = np.argsort(similarities)[-n_turns:][::-1]
         # sort top indices in increasing order
         top_indices = sorted(top_indices.tolist())
-        print(f"Retrieved turns indices: {top_indices}")
+        # debug print removed per user request
+        pass
         # Retrieve the corresponding history entries
         retrieved_turns = []
         for i in top_indices:
