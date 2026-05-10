@@ -129,7 +129,12 @@ def score_run(
     lambda_: float = DEFAULT_LAMBDA,
 ) -> RunScore:
     task_scores: list[TaskScore] = []
-    task_dirs = sorted(p for p in run_dir.iterdir() if p.is_dir() and p.name.startswith("task_"))
+    #task_dirs = sorted(p for p in run_dir.iterdir() if p.is_dir() and p.name.startswith("task_"))
+    task_dirs = sorted(
+        (p for p in run_dir.iterdir() if p.is_dir() and p.name.startswith("task_")),
+        key=lambda p: int(p.name.split("_")[1])
+    )
+    
     for task_dir in task_dirs:
         task_id = task_dir.name
         prediction_path = task_dir / "prediction.csv"

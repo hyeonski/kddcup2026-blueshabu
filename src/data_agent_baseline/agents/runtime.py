@@ -15,6 +15,7 @@ class StepRecord:
     raw_response: str
     observation: dict[str, Any]
     ok: bool
+    plan: str = ""  # Plan-and-Solve: 계획 단계 저장
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
