@@ -11,7 +11,7 @@ from typing import Any, Optional
 
 from data_agent_baseline.agents.model import ModelAdapter, ModelMessage, ModelStep, ModelAdapterLLMWrapper
 from data_agent_baseline.agents.prompt import (
-    REACT_SYSTEM_PROMPT,
+    REACT_PS_SYSTEM_PROMPT,
     build_observation_prompt,
     build_system_prompt,
     build_task_prompt,
@@ -93,18 +93,24 @@ def parse_model_step(raw_response: str) -> ModelStep:
     thought = payload.get("thought", "")
     action = payload.get("action")
     action_input = payload.get("action_input", {})
+    # Plan-and-Solve: plan 필드 선택적으로 파싱 (있으면 사용, 없으면 공백)
+    plan = payload.get("plan", "")
+    
     if not isinstance(thought, str):
         raise ValueError("thought must be a string.")
     if not isinstance(action, str) or not action:
         raise ValueError("action must be a non-empty string.")
     if not isinstance(action_input, dict):
         raise ValueError("action_input must be a JSON object.")
+    if not isinstance(plan, str):
+        raise ValueError("plan must be a string.")
 
     return ModelStep(
         thought=thought,
         action=action,
         action_input=action_input,
         raw_response=raw_response,
+        plan=plan,
     )
 
 
@@ -120,12 +126,15 @@ class ReActAgent:
         self.model = model
         self.tools = tools
         self.config = config or ReActAgentConfig()
-        self.system_prompt = system_prompt or REACT_SYSTEM_PROMPT
+        self.system_prompt = system_prompt or REACT_PS_SYSTEM_PROMPT
         self.logger = logging.getLogger(__name__)
         
         # ACON HistoryOptimizer 초기화
         self.history_optimizer: Any = None
         self.compressed_history: str | None = None
+        # 마지막 K step 보존
+        self.preserve_last_k_steps: int = 5
+        self.preserved_steps: list[StepRecord] = []  # 마지막 K step 보존할 steps
         
         if self.config.enable_context_optimization and ACONHistoryOptimizer is not None:
             try:
@@ -162,36 +171,53 @@ class ReActAgent:
                 self.logger.warning(traceback.format_exc())
                 self.history_optimizer = None
 
+    
+    def _has_retry_budget(self, started_at: float) -> bool:
+        budget = self.config.wall_budget_seconds
+        if budget is None:
+            return True
+        elapsed = perf_counter() - started_at
+        return elapsed <= max(budget - self.config.safety_margin_seconds, 0.0)
+
+    def _can_retry_empty_answer(self, step_index: int, started_at: float) -> bool:
+        return step_index < self.config.max_steps and self._has_retry_budget(started_at)
+
 
 
     def _build_messages(self, task: PublicTask, state: AgentRuntimeState) -> list[ModelMessage]:
-        """Build messages for model. Include compressed history if available."""
+        """Build messages for model. Only include preserved last K steps."""
         system_content = build_system_prompt(
             self.tools.describe_for_prompt(),
             system_prompt=self.system_prompt,
         )
         messages = [ModelMessage(role="system", content=system_content)]
-        messages.append(ModelMessage(role="user", content=build_task_prompt(task)))
         
-        # 압축된 history가 있으면 포함
+        # Task + Compressed History를 하나의 user 메시지로
+        task_content = build_task_prompt(task)
         if self.compressed_history:
-            messages.append(
-                ModelMessage(
-                    role="user",
-                    content=f"[Previous context summary]\n{self.compressed_history}"
-                )
-            )
+            task_content += f"\n\n<HISTORY_SUMMARY>\n{self.compressed_history}\n</HISTORY_SUMMARY>"
+        messages.append(ModelMessage(role="user", content=task_content))
         
-        # 현재 steps 추가
-        for step in state.steps:
+        # 보존된 steps + 그 이후의 새로운 steps 추가
+        if self.preserved_steps:
+            # 보존된 steps 이후의 모든 새 steps 찾기
+            last_preserved_step_idx = self.preserved_steps[-1].step_index
+            new_steps_after_compression = [s for s in state.steps if s.step_index > last_preserved_step_idx]
+            steps_to_add = self.preserved_steps + new_steps_after_compression
+        else:
+            # 압축 전: 모든 steps 사용
+            steps_to_add = state.steps
+        
+        for step in steps_to_add:
             messages.append(ModelMessage(role="assistant", content=step.raw_response))
             messages.append(
                 ModelMessage(role="user", content=build_observation_prompt(step.observation))
             )
+        
         return messages
 
     def _complete_with_parse_recovery(
-        self, base_messages: list[ModelMessage]
+        self, task_id: str, base_messages: list[ModelMessage], step_id: int
     ) -> tuple[ModelStep | None, str, str | None]:
         """Call model and parse; retry on parse errors with a corrective hint.
 
@@ -202,7 +228,16 @@ class ReActAgent:
         last_raw_response = ""
         last_error: str | None = None
         for attempt in range(self.config.parse_retries + 1):
-            last_raw_response = self.model.complete(messages)
+            #last_raw_response = self.model.complete(messages)
+            try:
+                last_raw_response = self.model.complete(messages)
+            except RuntimeError as e:
+                if "missing text content" in str(e):
+                    if attempt < self.config.parse_retries:
+                        continue
+                    else:
+                        raise
+                raise
             try:
                 return parse_model_step(last_raw_response), last_raw_response, None
             except Exception as exc:  # noqa: BLE001 — surface any parse failure
@@ -239,20 +274,27 @@ class ReActAgent:
         except Exception:  # noqa: BLE001 — checkpoint failure must not crash the agent
             pass
 
-    def _try_compress_history(self, task: PublicTask, state: AgentRuntimeState) -> None:
-        """ACON HistoryOptimizer를 사용해 history 압축"""
-        if not self.history_optimizer or not state.steps:
-            return
-        
-        step_count = len(state.steps)
+    def _try_compress_history(self, task: PublicTask, state: AgentRuntimeState, step_id: int) -> None:
+        """ACON 방식으로 history 압축: 마지막 K step 이전만 압축"""
         task_id = task.task_id if hasattr(task, 'task_id') else "unknown"
         
-        # History를 텍스트 포맷으로 변환
-        history_text = self._format_steps_for_compression(state.steps)
-        current_len_chars = len(history_text)
-        current_len_with_summary = len((self.compressed_history or "") + history_text)
+        # Step 1: 마지막 K step 분리
+        preserve_steps_count = self.preserve_last_k_steps
         
-        # ACON의 check_summarization_needed 호출
+        if len(state.steps) <= preserve_steps_count:
+            # 아직 충분한 step이 없으면 압축 불필요
+            self.preserved_steps = state.steps
+            return
+        
+        steps_for_compression = state.steps[:-preserve_steps_count]
+        self.preserved_steps = state.steps[-preserve_steps_count:]
+        
+        # Step 2: 보존할 steps 이전 것만 압축
+        history_text = self._format_steps_for_compression(steps_for_compression)
+        if not history_text.strip():
+            return
+        
+        # Step 3: 압축 필요 여부 확인
         needs_compression = self.history_optimizer.check_summarization_needed(
             history_text, self.compressed_history
         )
@@ -260,9 +302,13 @@ class ReActAgent:
         if not needs_compression:
             return
         
-        # ACON의 process() 호출
-        # 파라미터: task, history (formatting된 텍스트), prev_history_summary
+        # Step 4: 압축 수행
         try:
+            compression_start_idx = steps_for_compression[0].step_index if steps_for_compression else 0
+            compression_end_idx = steps_for_compression[-1].step_index if steps_for_compression else 0
+            preserve_start_idx = self.preserved_steps[0].step_index if self.preserved_steps else 0
+            preserve_end_idx = self.preserved_steps[-1].step_index if self.preserved_steps else 0
+            
             compressed = self.history_optimizer.process(
                 task=task.question,
                 history=history_text,
@@ -271,7 +317,6 @@ class ReActAgent:
                 opt_args={}
             )
             
-            # process()는 (summary, index)를 반환하는데, 첫 번째만 사용함
             if isinstance(compressed, tuple):
                 compressed_text = compressed[0]
             else:
@@ -281,14 +326,24 @@ class ReActAgent:
                 self.compressed_history = compressed_text
                 
         except Exception as e:
-            pass
+            import traceback
+            self.logger.debug(traceback.format_exc())
+
+    # NOTE: Context-column validation removed per user request; rely on prompt guidance only.
 
     def _format_steps_for_compression(self, steps: list[StepRecord]) -> str:
-        """ACON HistoryOptimizer에 전달할 형식으로 steps를 포맷"""
+        """ACON HistoryOptimizer에 전달할 형식으로 steps를 포맷
+        
+        Plan-and-Solve: plan 필드 포함으로 계획 정보 보존
+        """
         formatted = []
         for step in steps:
             step_text = f"Step {step.step_index}:\n"
             step_text += f"  Thought: {step.thought}\n"
+            # Plan-and-Solve: 계획 단계 표시 (있으면 포함)
+            # 원본 출처: Plan-and-Solve-Prompting의 history 포맷
+            if hasattr(step, 'plan') and step.plan:
+                step_text += f"  Plan: {step.plan}\n"
             step_text += f"  Action: {step.action}\n"
             step_text += f"  Action Input: {json.dumps(step.action_input, ensure_ascii=False)}\n"
             if step.observation:
@@ -314,7 +369,8 @@ class ReActAgent:
                 )
                 break
             base_messages = self._build_messages(task, state)
-            model_step, raw_response, parse_error = self._complete_with_parse_recovery(base_messages)
+            
+            model_step, raw_response, parse_error = self._complete_with_parse_recovery(task.task_id, base_messages, step_index)
             if model_step is None:
                 state.steps.append(
                     StepRecord(
@@ -325,10 +381,15 @@ class ReActAgent:
                         raw_response=raw_response,
                         observation={"ok": False, "error": parse_error or "parse failed"},
                         ok=False,
+                        plan="",  # Plan-and-Solve: error 시에도 plan 필드 포함
                     )
                 )
                 self._flush_checkpoint(task, state, checkpoint_writer)
                 continue
+            plan_preview = model_step.plan.strip().replace("\n", " / ")
+            if len(plan_preview) > 140:
+                plan_preview = plan_preview[:140] + "..."
+
             try:
                 tool_result = self.tools.execute(task, model_step.action, model_step.action_input)
                 observation = {
@@ -336,6 +397,17 @@ class ReActAgent:
                     "tool": model_step.action,
                     "content": tool_result.content,
                 }
+                retry_empty_answer = (
+                    tool_result.is_terminal
+                    and tool_result.answer is not None
+                    and len(tool_result.answer.rows) == 0
+                    and self._can_retry_empty_answer(step_index, started_at)
+                )
+                if retry_empty_answer:
+                    observation["retry"] = True
+                    observation["retry_reason"] = (
+                        "submitted answer has 0 rows; continue reasoning and resubmit only if a non-empty result exists"
+                    )
                 step_record = StepRecord(
                     step_index=step_index,
                     thought=model_step.thought,
@@ -343,17 +415,23 @@ class ReActAgent:
                     action_input=model_step.action_input,
                     raw_response=raw_response,
                     observation=observation,
-                    ok=tool_result.ok,
+                    ok=tool_result.ok and not retry_empty_answer,
+                    plan=model_step.plan,  # Plan-and-Solve: LLM으로부터 받은 계획 저장
                 )
                 state.steps.append(step_record)
                 
                 if tool_result.is_terminal:
+                    if retry_empty_answer:
+                        self._try_compress_history(task, state, step_index)
+                        self._flush_checkpoint(task, state, checkpoint_writer)
+                        continue
+                    # Accept terminal answer as-is (no programmatic schema validation)
                     state.answer = tool_result.answer
                     self._flush_checkpoint(task, state, checkpoint_writer)
                     break
                 
                 # Context compression 시도
-                self._try_compress_history(task, state)
+                self._try_compress_history(task, state, step_index)
                 
                 self._flush_checkpoint(task, state, checkpoint_writer)
             except Exception as exc:
@@ -370,6 +448,7 @@ class ReActAgent:
                         raw_response=raw_response,
                         observation=observation,
                         ok=False,
+                        plan=model_step.plan,  # Plan-and-Solve: 예외 발생 시에도 계획 저장
                     )
                 )
                 self._flush_checkpoint(task, state, checkpoint_writer)
@@ -397,7 +476,7 @@ class ReActAgent:
         base_messages = self._build_messages(task, state)
         forced_messages = base_messages + [ModelMessage(role="user", content=_FORCE_ANSWER_HINT)]
         try:
-            model_step, raw_response, parse_error = self._complete_with_parse_recovery(forced_messages)
+            model_step, raw_response, parse_error = self._complete_with_parse_recovery(task.task_id, forced_messages, forced_index)
         except Exception as exc:  # noqa: BLE001
             state.steps.append(
                 StepRecord(
@@ -408,6 +487,7 @@ class ReActAgent:
                     raw_response="",
                     observation={"ok": False, "error": str(exc)},
                     ok=False,
+                    plan="",  # Plan-and-Solve
                 )
             )
             self._flush_checkpoint(task, state, checkpoint_writer)
@@ -423,6 +503,7 @@ class ReActAgent:
                     raw_response=raw_response,
                     observation={"ok": False, "error": parse_error or "parse failed"},
                     ok=False,
+                    plan="",  # Plan-and-Solve
                 )
             )
             self._flush_checkpoint(task, state, checkpoint_writer)
@@ -438,6 +519,7 @@ class ReActAgent:
                     raw_response=raw_response,
                     observation={"ok": False, "error": "Forced attempt did not call the answer tool."},
                     ok=False,
+                    plan=model_step.plan,  # Plan-and-Solve
                 )
             )
             self._flush_checkpoint(task, state, checkpoint_writer)
@@ -455,6 +537,7 @@ class ReActAgent:
                     raw_response=raw_response,
                     observation={"ok": False, "error": str(exc)},
                     ok=False,
+                    plan=model_step.plan,  # Plan-and-Solve
                 )
             )
             self._flush_checkpoint(task, state, checkpoint_writer)
@@ -470,6 +553,7 @@ class ReActAgent:
                 raw_response=raw_response,
                 observation=observation,
                 ok=tool_result.ok,
+                plan=model_step.plan,  # Plan-and-Solve
             )
         )
         if tool_result.is_terminal and tool_result.answer is not None:

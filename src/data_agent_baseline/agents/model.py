@@ -18,6 +18,7 @@ class ModelStep:
     action: str
     action_input: dict[str, Any]
     raw_response: str
+    plan: str = ""  # Plan-and-Solve: 다음 단계들의 계획 (선택사항)
 
 
 class ModelAdapter(Protocol):
