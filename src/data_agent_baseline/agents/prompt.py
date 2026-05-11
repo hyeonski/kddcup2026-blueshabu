@@ -4,7 +4,7 @@ import json
 
 from data_agent_baseline.benchmark.schema import PublicTask
 
-
+# 현재 PS 로직 사용 중이라 쓰지 않는 원본 프롬프트임.
 REACT_SYSTEM_PROMPT = """
 You are a ReAct-style data agent.
 
@@ -109,6 +109,55 @@ def build_task_prompt(task: PublicTask) -> str:
         "Prefer dataset column names in your final table. Use only the output columns that the question actually requires; do not include helper columns or computed columns unless the question explicitly asks for them. If the question asks for combined or derived fields, map them to the dataset columns (e.g., first_name + last_name instead of full_name) or name aggregates using SQL-like expressions (e.g., SUM(T2.cost)). "
         "When you have the final table, call the `answer` tool."
     )
+
+
+# ==================== ACON Context Optimization Prompts ====================
+
+ACON_SYSTEM_PROMPT = """
+You are an agent tasked with extracting and refining a concise and optimized version of the context based on the user instruction and other provided information.
+""".strip()
+
+ACON_HISTORY_V2_PROMPT = """
+You are maintaining a structured context-aware summary for a productivity agent. You will be given the user instruction for the agent, a list of interactions corresponding to actions taken by the agent, and the most recent previous summary if one exists. Produce the following:
+
+### REASONING
+Summarize key progress, decisions made, important observed outcomes, and rationale behind actions taken so far. Include how earlier steps influenced later ones and why certain data is retained in the summary.
+
+### COMPLETED
+List completed subtasks or successful outcomes, with brief results if applicable.
+
+---
+
+## [Information Source]
+
+### USER INSTRUCTION
+
+{{ task }}
+
+## [PREVIOUS SUMMARY] (if any)
+
+{{ prev_summary }}
+
+## [HISTORY OF INTERACTIONS]
+
+{{ history }}
+
+---
+
+## PRIORITIZE
+
+1. Keep all sections relevant and concise.  
+2. Use reusable structured formats when summarizing artifacts.  
+3. Ensure agent can resume task with no loss of information.
+4. Include key info from errors or failed attempts to prevent repeated mistakes.
+5. Preserve all essential artifacts and data needed to complete the task.
+
+---
+
+### [Output Format]
+
+Do **not** include the input or any additional explanation. Only return the formatted summary.
+""".strip()
 
 
 def build_observation_prompt(observation: dict[str, object]) -> str:
