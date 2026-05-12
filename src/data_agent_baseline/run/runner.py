@@ -71,6 +71,36 @@ def build_run_id_from_config(config: AppConfig) -> str:
     return f"{_short_model(config.agent.model)}-{build_param_suffix(config)}"
 
 
+def git_state() -> dict[str, Any]:
+    """Best-effort snapshot of the working-tree's git state.
+
+    Captures the commit SHA, branch, and whether the working tree is dirty
+    (uncommitted changes). All fields fall back to ``None`` if git is
+    unavailable or this isn't a git checkout — never raises.
+    """
+    import subprocess
+
+    def _run(*args: str) -> str | None:
+        try:
+            return subprocess.check_output(
+                ["git", *args],
+                cwd=Path(__file__).resolve().parent,
+                stderr=subprocess.DEVNULL,
+                text=True,
+            ).strip()
+        except (subprocess.CalledProcessError, FileNotFoundError, OSError):
+            return None
+
+    sha = _run("rev-parse", "HEAD")
+    branch = _run("rev-parse", "--abbrev-ref", "HEAD")
+    porcelain = _run("status", "--porcelain")
+    return {
+        "sha": sha,
+        "branch": branch if branch and branch != "HEAD" else None,
+        "dirty": (None if porcelain is None else bool(porcelain)),
+    }
+
+
 def agent_config_snapshot(config: AppConfig) -> dict[str, Any]:
     """Serialize the agent config fields that influence benchmark outcomes."""
     return {
@@ -369,6 +399,8 @@ def run_benchmark(
     limit: int | None = None,
     progress_callback: Callable[[TaskRunArtifacts], None] | None = None,
 ) -> tuple[Path, list[TaskRunArtifacts]]:
+    started_at = datetime.now(timezone.utc).isoformat()
+    git_snapshot = git_state()
     # Resolve run_id: empty → auto-build from params; "{params}" placeholder → expand.
     raw_run_id = config.run.run_id
     if raw_run_id is None:
@@ -427,6 +459,7 @@ def run_benchmark(
                     progress_callback(artifact)
             task_artifacts = [artifact for artifact in indexed_artifacts if artifact is not None]
 
+    finished_at = datetime.now(timezone.utc).isoformat()
     summary_path = run_output_dir / "summary.json"
     _write_json(
         summary_path,
@@ -435,6 +468,9 @@ def run_benchmark(
             "task_count": len(task_artifacts),
             "succeeded_task_count": sum(1 for artifact in task_artifacts if artifact.succeeded),
             "max_workers": effective_workers,
+            "started_at": started_at,
+            "finished_at": finished_at,
+            "git": git_snapshot,
             "agent_config": agent_config_snapshot(config),
             "tasks": [artifact.to_dict() for artifact in task_artifacts],
         },
