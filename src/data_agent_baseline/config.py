@@ -83,6 +83,7 @@ class AgentConfig:
     # ACON Context Optimization
     enable_context_optimization: bool = False
     history_summarization_threshold: int = 4000
+    preserve_last_k_steps: int = 5
 
 
 @dataclass(frozen=True, slots=True)
@@ -138,6 +139,7 @@ def load_app_config(config_path: Path) -> AppConfig:
         seed=seed_value,
         enable_context_optimization=bool(agent_payload.get("enable_context_optimization", agent_defaults.enable_context_optimization)),
         history_summarization_threshold=int(agent_payload.get("history_summarization_threshold", agent_defaults.history_summarization_threshold)),
+        preserve_last_k_steps=int(agent_payload.get("preserve_last_k_steps", agent_defaults.preserve_last_k_steps)),
     )
     raw_run_id = run_payload.get("run_id")
     run_id = run_defaults.run_id
