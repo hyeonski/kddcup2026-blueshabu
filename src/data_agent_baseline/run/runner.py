@@ -47,14 +47,14 @@ def create_run_id() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
 
-def _short_model(model: str) -> str:
-    # "qwen/qwen3.5-35b-a3b" → "qwen3.5-35b-a3b"
-    return model.rsplit("/", 1)[-1]
-
-
 def _fmt_temp(t: float) -> str:
     s = f"{t:g}"
     return s if "." in s else f"{s}.0"
+
+
+def short_timestamp() -> str:
+    """Compact, sortable timestamp for run_id: YYMMDDHHMM in local time."""
+    return datetime.now().strftime("%y%m%d%H%M")
 
 
 def build_param_suffix(config: AppConfig) -> str:
@@ -67,8 +67,8 @@ def build_param_suffix(config: AppConfig) -> str:
 
 
 def build_run_id_from_config(config: AppConfig) -> str:
-    """Build a fully self-describing run_id from agent config."""
-    return f"{_short_model(config.agent.model)}-{build_param_suffix(config)}"
+    """Build a self-describing run_id from agent config: {timestamp}-{params}."""
+    return f"{short_timestamp()}-{build_param_suffix(config)}"
 
 
 def git_state() -> dict[str, Any]:
@@ -401,14 +401,17 @@ def run_benchmark(
 ) -> tuple[Path, list[TaskRunArtifacts]]:
     started_at = datetime.now(timezone.utc).isoformat()
     git_snapshot = git_state()
-    # Resolve run_id: empty → auto-build from params; "{params}" placeholder → expand.
+    # Resolve run_id: empty → auto-build (timestamp+params);
+    # "{params}" / "{ts}" placeholders → expand inline.
     raw_run_id = config.run.run_id
     if raw_run_id is None:
         resolved_run_id: str | None = build_run_id_from_config(config)
-    elif "{params}" in raw_run_id:
-        resolved_run_id = raw_run_id.replace("{params}", build_param_suffix(config))
     else:
         resolved_run_id = raw_run_id
+        if "{params}" in resolved_run_id:
+            resolved_run_id = resolved_run_id.replace("{params}", build_param_suffix(config))
+        if "{ts}" in resolved_run_id:
+            resolved_run_id = resolved_run_id.replace("{ts}", short_timestamp())
     effective_run_id, run_output_dir = create_run_output_dir(config.run.output_dir, run_id=resolved_run_id)
 
     dataset = DABenchPublicDataset(config.dataset.root_path)
