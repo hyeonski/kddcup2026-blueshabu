@@ -99,9 +99,35 @@ class OpenAIModelAdapter:
         choices = response.choices or []
         if not choices:
             raise RuntimeError("Model response missing choices.")
-        content = choices[0].message.content
-        if not isinstance(content, str):
+        
+        #content = choices[0].message.content
+        #if not isinstance(content, str):
+        #    raise RuntimeError("Model response missing text content.")
+       
+        # Thinking 모델 fallback (qwen3, deepseek-r1 등)
+        # 이 모델들은 reasoning을 별도 채널(reasoning_content)에 쓰고
+        # content를 None 또는 빈 문자열로 반환하는 경우가 있음.
+        # content가 유효하지 않을 때만 fallback을 시도하고,
+        # fallback도 없으면 기존과 동일하게 RuntimeError를 발생시킴.
+        message = choices[0].message
+        content = message.content
+        
+        if not isinstance(content, str) or not content.strip():
+            # 1순위: reasoning_content 필드 (qwen3 / deepseek-r1 표준)
+            reasoning = getattr(message, "reasoning_content", None)
+            if isinstance(reasoning, str) and reasoning.strip():
+                content = reasoning
+            else:
+                # 2순위: 일부 provider가 content 안에 <think>...</think>로 감싸는 경우
+                raw = getattr(message, "content", "") or ""
+                import re as _re
+                think_match = _re.search(r"<think>(.*?)</think>", raw, _re.DOTALL)
+                if think_match:
+                    content = think_match.group(1).strip()
+ 
+        if not isinstance(content, str) or not content.strip():
             raise RuntimeError("Model response missing text content.")
+        
         return content
 
 
