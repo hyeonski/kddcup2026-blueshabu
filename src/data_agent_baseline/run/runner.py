@@ -47,6 +47,77 @@ def create_run_id() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
 
+def _fmt_temp(t: float) -> str:
+    s = f"{t:g}"
+    return s if "." in s else f"{s}.0"
+
+
+def short_timestamp() -> str:
+    """Compact, sortable timestamp for run_id: YYMMDDHHMM in local time."""
+    return datetime.now().strftime("%y%m%d%H%M")
+
+
+def build_param_suffix(config: AppConfig) -> str:
+    """Deterministic param suffix for run_id: encodes T/H/K and ACON/PS flags."""
+    parts = [f"T{_fmt_temp(config.agent.temperature)}"]
+    if config.agent.enable_context_optimization:
+        parts.append(f"H{config.agent.history_summarization_threshold}")
+        parts.append(f"K{config.agent.preserve_last_k_steps}")
+    return "-".join(parts)
+
+
+def build_run_id_from_config(config: AppConfig) -> str:
+    """Build a self-describing run_id from agent config: {timestamp}-{params}."""
+    return f"{short_timestamp()}-{build_param_suffix(config)}"
+
+
+def git_state() -> dict[str, Any]:
+    """Best-effort snapshot of the working-tree's git state.
+
+    Captures the commit SHA, branch, and whether the working tree is dirty
+    (uncommitted changes). All fields fall back to ``None`` if git is
+    unavailable or this isn't a git checkout — never raises.
+    """
+    import subprocess
+
+    def _run(*args: str) -> str | None:
+        try:
+            return subprocess.check_output(
+                ["git", *args],
+                cwd=Path(__file__).resolve().parent,
+                stderr=subprocess.DEVNULL,
+                text=True,
+            ).strip()
+        except (subprocess.CalledProcessError, FileNotFoundError, OSError):
+            return None
+
+    sha = _run("rev-parse", "HEAD")
+    branch = _run("rev-parse", "--abbrev-ref", "HEAD")
+    porcelain = _run("status", "--porcelain")
+    return {
+        "sha": sha,
+        "branch": branch if branch and branch != "HEAD" else None,
+        "dirty": (None if porcelain is None else bool(porcelain)),
+    }
+
+
+def agent_config_snapshot(config: AppConfig) -> dict[str, Any]:
+    """Serialize the agent config fields that influence benchmark outcomes."""
+    return {
+        "model": config.agent.model,
+        "temperature": config.agent.temperature,
+        "max_steps": config.agent.max_steps,
+        "wall_budget_seconds": config.agent.wall_budget_seconds,
+        "safety_margin_seconds": config.agent.safety_margin_seconds,
+        "seed": config.agent.seed,
+        "provider_only": list(config.agent.provider_only),
+        "enable_context_optimization": config.agent.enable_context_optimization,
+        "history_summarization_threshold": config.agent.history_summarization_threshold,
+        "preserve_last_k_steps": config.agent.preserve_last_k_steps,
+        "task_timeout_seconds": config.run.task_timeout_seconds,
+    }
+
+
 def resolve_run_id(run_id: str | None = None) -> str:
     if run_id is None:
         return create_run_id()
@@ -93,6 +164,7 @@ def _build_react_config(config: AppConfig) -> ReActAgentConfig:
         safety_margin_seconds=config.agent.safety_margin_seconds,
         enable_context_optimization=config.agent.enable_context_optimization,
         history_summarization_threshold=config.agent.history_summarization_threshold,
+        preserve_last_k_steps=config.agent.preserve_last_k_steps,
     )
 
 
@@ -327,7 +399,20 @@ def run_benchmark(
     limit: int | None = None,
     progress_callback: Callable[[TaskRunArtifacts], None] | None = None,
 ) -> tuple[Path, list[TaskRunArtifacts]]:
-    effective_run_id, run_output_dir = create_run_output_dir(config.run.output_dir, run_id=config.run.run_id)
+    started_at = datetime.now(timezone.utc).isoformat()
+    git_snapshot = git_state()
+    # Resolve run_id: empty → auto-build (timestamp+params);
+    # "{params}" / "{ts}" placeholders → expand inline.
+    raw_run_id = config.run.run_id
+    if raw_run_id is None:
+        resolved_run_id: str | None = build_run_id_from_config(config)
+    else:
+        resolved_run_id = raw_run_id
+        if "{params}" in resolved_run_id:
+            resolved_run_id = resolved_run_id.replace("{params}", build_param_suffix(config))
+        if "{ts}" in resolved_run_id:
+            resolved_run_id = resolved_run_id.replace("{ts}", short_timestamp())
+    effective_run_id, run_output_dir = create_run_output_dir(config.run.output_dir, run_id=resolved_run_id)
 
     dataset = DABenchPublicDataset(config.dataset.root_path)
     tasks = dataset.iter_tasks()
@@ -377,6 +462,7 @@ def run_benchmark(
                     progress_callback(artifact)
             task_artifacts = [artifact for artifact in indexed_artifacts if artifact is not None]
 
+    finished_at = datetime.now(timezone.utc).isoformat()
     summary_path = run_output_dir / "summary.json"
     _write_json(
         summary_path,
@@ -385,6 +471,10 @@ def run_benchmark(
             "task_count": len(task_artifacts),
             "succeeded_task_count": sum(1 for artifact in task_artifacts if artifact.succeeded),
             "max_workers": effective_workers,
+            "started_at": started_at,
+            "finished_at": finished_at,
+            "git": git_snapshot,
+            "agent_config": agent_config_snapshot(config),
             "tasks": [artifact.to_dict() for artifact in task_artifacts],
         },
     )

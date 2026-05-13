@@ -41,6 +41,8 @@ class ReActAgentConfig:
     enable_context_optimization: bool = False
     # history_summarization_threshold: 이 토큰 이상이면 압축 수행 (-1 = 매번 압축)
     history_summarization_threshold: int = 4000
+    # 압축 시 verbatim으로 보존할 가장 최근 step 수
+    preserve_last_k_steps: int = 5
 
 
 CheckpointWriter = Callable[[dict[str, Any]], None]
@@ -133,7 +135,7 @@ class ReActAgent:
         self.history_optimizer: Any = None
         self.compressed_history: str | None = None
         # 마지막 K step 보존
-        self.preserve_last_k_steps: int = 5
+        self.preserve_last_k_steps: int = self.config.preserve_last_k_steps
         self.preserved_steps: list[StepRecord] = []  # 마지막 K step 보존할 steps
         
         if self.config.enable_context_optimization and ACONHistoryOptimizer is not None:
