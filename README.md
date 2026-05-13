@@ -46,7 +46,6 @@
 ├── scripts/
 │   ├── make_submission.sh     # buildx amd64 + docker save | gzip → <team>_v<N>.tar.gz
 │   └── test_run.sh            # 룰 §3.4 의 docker load + docker run 시뮬레이션
-├── benchmarks/                # 베이스라인 점수, 분산 분석, 개선 plan (Markdown)
 └── data/public/               # 공개 demo 입력/정답 (gitignored, 별도 다운로드)
 ```
 
@@ -82,7 +81,6 @@
 
    # Recommended: pin OpenRouter routing + seed so cross-provider routing
    # doesn't add ±0.05 of variance to local benchmark scores
-   # (see benchmarks/variance_2026-05-03.md)
    export MODEL_PROVIDER_ONLY=alibaba
    export MODEL_SEED=42
    ```
@@ -384,15 +382,6 @@ for d in artifacts/runs/$RUN_ID/task_*; do
 done
 ```
 
-### Reference snapshots
-
-- [`benchmarks/baseline_9205902.md`](benchmarks/baseline_9205902.md) — bucket-level
-  analysis of the team master HEAD with this exact workflow.
-- [`benchmarks/variance_2026-05-03.md`](benchmarks/variance_2026-05-03.md) —
-  cross-run variance and how `MODEL_PROVIDER_ONLY=alibaba` reduces it.
-- [`benchmarks/plan_next_improvements.md`](benchmarks/plan_next_improvements.md) —
-  prioritized work items mapped to the failure buckets above.
-
 ## Tools
 
 The baseline exposes these tools to the model:
@@ -443,11 +432,11 @@ artifacts/runs/<run_id>/
 
 | Run | 평균 점수 | 측정 환경 | 문서 |
 |---|---|---|---|
-| 팀 master `9205902` | 0.5158 | 로컬 50 태스크, OpenRouter Alibaba | [baseline_9205902.md](benchmarks/baseline_9205902.md) |
+| 팀 master `9205902` | 0.5158 | 로컬 50 태스크, OpenRouter Alibaba | |
 | 팀 v1 도커 (`bc650a4`) | ≈ 0.4954 | 도커 컨테이너 50 태스크 환산 | git log + `artifacts/eval/full-rebuild-1121/logs/summary.json` |
-| upstream `c6992b0` | 0.2833 | 변경 없는 starter kit | [baseline_c6992b0.md](benchmarks/baseline_c6992b0.md) |
+| upstream `c6992b0` | 0.2833 | 변경 없는 starter kit | |
 
-분산 ±0.05 이내가 정상 범위 ([variance_2026-05-03.md](benchmarks/variance_2026-05-03.md)). 새 변경이 이 범위 밖으로 떨어지면 회귀.
+분산 ±0.05 이내가 정상 범위. 새 변경이 이 범위 밖으로 떨어지면 회귀.
 
 ## Submission (Docker)
 
