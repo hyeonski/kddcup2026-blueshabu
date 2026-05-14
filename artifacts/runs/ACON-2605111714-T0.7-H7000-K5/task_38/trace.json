@@ -1,0 +1,731 @@
+{
+  "task_id": "task_38",
+  "answer": null,
+  "steps": [
+    {
+      "step_index": 1,
+      "thought": "I need to find cash withdrawals for client id 3356. First, I need to explore the context directory to understand the data structure and find relevant tables.",
+      "action": "list_context",
+      "action_input": {
+        "max_depth": 4
+      },
+      "raw_response": "\n\n```json\n{\"thought\":\"I need to find cash withdrawals for client id 3356. First, I need to explore the context directory to understand the data structure and find relevant tables.\",\"plan\":\"1. List files in context directory\\n2. Examine the schema to understand table structures\\n3. Find withdrawal/transaction data\\n4. Query for client 3356 cash withdrawals\\n5. Return the answer\",\"action\":\"list_context\",\"action_input\":{\"max_depth\":4}}\n```",
+      "observation": {
+        "ok": true,
+        "tool": "list_context",
+        "content": {
+          "root": "/Users/hyeonseungkim/workspace/kddcup2026-blueshabu/data/public/input/task_38/context",
+          "entries": [
+            {
+              "path": "csv",
+              "kind": "dir",
+              "size": null
+            },
+            {
+              "path": "csv/disp.csv",
+              "kind": "file",
+              "size": 118970
+            },
+            {
+              "path": "csv/trans.csv",
+              "kind": "file",
+              "size": 59775097
+            },
+            {
+              "path": "json",
+              "kind": "dir",
+              "size": null
+            },
+            {
+              "path": "json/account.json",
+              "kind": "file",
+              "size": 582852
+            },
+            {
+              "path": "json/client.json",
+              "kind": "file",
+              "size": 626351
+            },
+            {
+              "path": "knowledge.md",
+              "kind": "file",
+              "size": 4870
+            },
+            {
+              "path": "output.csv",
+              "kind": "file",
+              "size": 4983
+            },
+            {
+              "path": "withdrawals_output.csv",
+              "kind": "file",
+              "size": 5497
+            }
+          ]
+        }
+      },
+      "ok": true,
+      "plan": "1. List files in context directory\n2. Examine the schema to understand table structures\n3. Find withdrawal/transaction data\n4. Query for client 3356 cash withdrawals\n5. Return the answer"
+    },
+    {
+      "step_index": 2,
+      "thought": "I can see there are CSV files (disp.csv, trans.csv), JSON files (account.json, client.json), and knowledge documentation. Let me first read the knowledge.md file to understand the schema and data structure.",
+      "action": "read_doc",
+      "action_input": {
+        "path": "knowledge.md"
+      },
+      "raw_response": "\n\n```json\n{\"thought\":\"I can see there are CSV files (disp.csv, trans.csv), JSON files (account.json, client.json), and knowledge documentation. Let me first read the knowledge.md file to understand the schema and data structure.\",\"plan\":\"1. Read knowledge.md to understand the data schema\\n2. Examine the CSV files to understand their structure\\n3. Query for client 3356 cash withdrawals\\n4. Return the answer\",\"action\":\"read_doc\",\"action_input\":{\"path\":\"knowledge.md\"}}\n```",
+      "observation": {
+        "ok": true,
+        "tool": "read_doc",
+        "content": {
+          "path": "knowledge.md",
+          "preview": "# Enterprise Data Governance Knowledge Guide for Financial Database\n\n## 1. Introduction\nThis guide serves as a comprehensive semantic layer for the financial database, ensuring consistent understanding and usage of data across the organization. It emphasizes strict data governance standards, providing clear definitions, metric calculations, and conventions to support business operations and decision-making.\n\n## 2. Core Entities & Fields\n\n### Business Entities\n- **Client**: Represents individual customers, identified by `client_id`. Key attributes include `gender`, `birth_date`, and `district_id`.\n- **Account**: Represents financial accounts, identified by `account_id`. Key attributes include `frequency`, `date` (account opening date), and `district_id`.\n- **District**: Represents geographical areas, identified by `district_id`. Key attributes include `A2` (district name), `A3` (region name), `A11` (average salary), and `A4` (number of inhabitants).\n- **Loan**: Represents loan contracts, identified by `loan_id`. Key attributes include `amount`, `duration`, and `status`.\n- **Disp**: Represents account ownership, linking `account_id` to `client_id`.\n\n### Key Attributes\n- **Gender**: Coded as 'F' for female and 'M' for male.\n- **Frequency**: Indicates issuance frequency, with values such as 'POPLATEK PO OBRATU' (issuance after transaction), 'POPLATEK TYDNE' (weekly issuance), and 'POPLATEK MESICNE' (monthly issuance).\n- **Status**: Loan status, with 'A' indicating a completed contract with no issues, 'C' for a running contract in good standing, and 'D' for a running contract with the client in debt.\n\n## 3. Metric Definitions\n\n### Key Performance Indicators (KPIs)\n- **Average Salary Gap**: Calculated as the difference between the highest and lowest average salary in a district. Formula: `MAX(A11) - MIN(A11)`.\n- **Percentage of Male Clients**: Calculated as the ratio of male clients to total clients, expressed as a percentage. Formula: `(COUNT(male clients) / COUNT(clients)) * 100`.\n- **Loan Growth Rate**: Measures the growth in loan amounts year-over-year. Formula: `(SUM(amount_1997) - SUM(amount_1996)) / SUM(amount_1996) * 100`.\n- **Unemployment Increment Rate**: Measures the change in unemployment rate year-over-year. Formula: `((unemployment rate 2016 - unemployment rate 2015) / unemployment rate 2015) * 100`.\n- **Account Balance Increase Rate**: Measures the percentage increase in account balance over time. Formula: `((balance of date A - balance of date B) / balance of date B) * 100`.\n\n## 4. Constraints & Conventions\n\n### Filtering Criteria\n- **Gender**: Use 'F' for female and 'M' for male.\n- **Loan Duration**: Loans with a duration greater than 12 months are considered long-term.\n- **Date Formats**: Use 'YYYY-MM-DD' for all date fields. Fiscal years align with the calendar year.\n\n### Currency & Units\n- **Currency**: All financial amounts are in the local currency unless specified otherwise.\n- **Units**: Population and salary figures are in whole numbers.\n\n## 5. Exemplar Use Cases\n\n### Example 1: Calculating the Average Salary Gap\n- **Natural Language**: Determine the gap between the highest and lowest average salary in a district.\n- **SQL**: `SELECT MAX(A11) - MIN(A11) FROM district`.\n\n### Example 2: Determining the Percentage of Male Clients\n- **Natural Language**: Calculate the percentage of male clients in a specific region.\n- **SQL**: `SELECT (COUNT(T1.client_id) WHERE T1.gender = 'M') * 100 / COUNT(T1.client_id) FROM client AS T1 INNER JOIN district AS T2 ON T1.district_id = T2.district_id WHERE T2.A3 = 'specified region'`.\n\n### Example 3: Loan Growth Rate Calculation\n- **Natural Language**: Measure the growth rate of loan amounts from 1996 to 1997.\n- **SQL**: `SELECT (SUM(amount_1997) - SUM(amount_1996)) / SUM(amount_1996) * 100 FROM loan`.\n\n### Example 4: Unemployment Increment Rate\n- **Natural Language**: Calculate the percentage increase in unemployment from 2015 to 2016.\n- **SQL**: `SELECT ((A13 - A12) / A12) * 100 ",
+          "truncated": true
+        }
+      },
+      "ok": true,
+      "plan": "1. Read knowledge.md to understand the data schema\n2. Examine the CSV files to understand their structure\n3. Query for client 3356 cash withdrawals\n4. Return the answer"
+    },
+    {
+      "step_index": 3,
+      "thought": "I've seen the beginning of the knowledge guide. I need to see more of it and also examine the CSV files to understand the transaction and withdrawal data structure.",
+      "action": "read_csv",
+      "action_input": {
+        "path": "csv/trans.csv",
+        "max_rows": 30
+      },
+      "raw_response": "\n\n```json\n{\"thought\":\"I've seen the beginning of the knowledge guide. I need to see more of it and also examine the CSV files to understand the transaction and withdrawal data structure.\",\"plan\":\"1. Read the trans.csv file to understand transaction structure\\n2. Read the disp.csv file to understand account-client relationship\\n3. Query for client 3356 cash withdrawals\\n4. Return the answer\",\"action\":\"read_csv\",\"action_input\":{\"path\":\"csv/trans.csv\",\"max_rows\":30}}\n```",
+      "observation": {
+        "ok": true,
+        "tool": "read_csv",
+        "content": {
+          "path": "csv/trans.csv",
+          "columns": [
+            "trans_id",
+            "account_id",
+            "date",
+            "type",
+            "operation",
+            "amount",
+            "balance",
+            "k_symbol",
+            "bank",
+            "account"
+          ],
+          "rows": [
+            [
+              "1",
+              "1",
+              "1995-03-24",
+              "PRIJEM",
+              "VKLAD",
+              "1000",
+              "1000",
+              "",
+              "",
+              ""
+            ],
+            [
+              "5",
+              "1",
+              "1995-04-13",
+              "PRIJEM",
+              "PREVOD Z UCTU",
+              "3679",
+              "4679",
+              "",
+              "AB",
+              "41403269"
+            ],
+            [
+              "6",
+              "1",
+              "1995-05-13",
+              "PRIJEM",
+              "PREVOD Z UCTU",
+              "3679",
+              "20977",
+              "",
+              "AB",
+              "41403269"
+            ],
+            [
+              "7",
+              "1",
+              "1995-06-13",
+              "PRIJEM",
+              "PREVOD Z UCTU",
+              "3679",
+              "26835",
+              "",
+              "AB",
+              "41403269"
+            ],
+            [
+              "8",
+              "1",
+              "1995-07-13",
+              "PRIJEM",
+              "PREVOD Z UCTU",
+              "3679",
+              "30415",
+              "",
+              "AB",
+              "41403269"
+            ],
+            [
+              "9",
+              "1",
+              "1995-08-13",
+              "PRIJEM",
+              "PREVOD Z UCTU",
+              "3679",
+              "28903",
+              "",
+              "AB",
+              "41403269"
+            ],
+            [
+              "10",
+              "1",
+              "1995-09-13",
+              "PRIJEM",
+              "PREVOD Z UCTU",
+              "3679",
+              "22714",
+              "",
+              "AB",
+              "41403269"
+            ],
+            [
+              "11",
+              "1",
+              "1995-10-13",
+              "PRIJEM",
+              "PREVOD Z UCTU",
+              "3679",
+              "23318",
+              "",
+              "AB",
+              "41403269"
+            ],
+            [
+              "12",
+              "1",
+              "1995-11-13",
+              "PRIJEM",
+              "PREVOD Z UCTU",
+              "3679",
+              "21721",
+              "",
+              "AB",
+              "41403269"
+            ],
+            [
+              "13",
+              "1",
+              "1995-12-13",
+              "PRIJEM",
+              "PREVOD Z UCTU",
+              "3679",
+              "20249",
+              "",
+              "AB",
+              "41403269"
+            ],
+            [
+              "14",
+              "1",
+              "1996-01-13",
+              "PRIJEM",
+              "PREVOD Z UCTU",
+              "3679",
+              "17870",
+              "",
+              "AB",
+              "41403269"
+            ],
+            [
+              "15",
+              "1",
+              "1996-02-13",
+              "PRIJEM",
+              "PREVOD Z UCTU",
+              "3679",
+              "14807",
+              "",
+              "AB",
+              "41403269"
+            ],
+            [
+              "16",
+              "1",
+              "1996-03-13",
+              "PRIJEM",
+              "PREVOD Z UCTU",
+              "3679",
+              "16179",
+              "",
+              "AB",
+              "41403269"
+            ],
+            [
+              "17",
+              "1",
+              "1996-04-13",
+              "PRIJEM",
+              "PREVOD Z UCTU",
+              "3679",
+              "17657",
+              "",
+              "AB",
+              "41403269"
+            ],
+            [
+              "18",
+              "1",
+              "1996-05-13",
+              "PRIJEM",
+              "PREVOD Z UCTU",
+              "3679",
+              "16937",
+              "",
+              "AB",
+              "41403269"
+            ],
+            [
+              "19",
+              "1",
+              "1996-06-13",
+              "PRIJEM",
+              "PREVOD Z UCTU",
+              "3679",
+              "15652",
+              "",
+              "AB",
+              "41403269"
+            ],
+            [
+              "20",
+              "1",
+              "1996-07-13",
+              "PRIJEM",
+              "PREVOD Z UCTU",
+              "3679",
+              "17970",
+              "",
+              "AB",
+              "41403269"
+            ],
+            [
+              "21",
+              "1",
+              "1996-08-13",
+              "PRIJEM",
+              "PREVOD Z UCTU",
+              "3679",
+              "18126",
+              "",
+              "AB",
+              "41403269"
+            ],
+            [
+              "22",
+              "1",
+              "1996-09-13",
+              "PRIJEM",
+              "PREVOD Z UCTU",
+              "3679",
+              "20404",
+              "",
+              "AB",
+              "41403269"
+            ],
+            [
+              "23",
+              "1",
+              "1996-10-13",
+              "PRIJEM",
+              "PREVOD Z UCTU",
+              "3679",
+              "19995",
+              "",
+              "AB",
+              "41403269"
+            ],
+            [
+              "24",
+              "1",
+              "1996-11-13",
+              "PRIJEM",
+              "PREVOD Z UCTU",
+              "3679",
+              "18011",
+              "",
+              "AB",
+              "41403269"
+            ],
+            [
+              "25",
+              "1",
+              "1996-12-13",
+              "PRIJEM",
+              "PREVOD Z UCTU",
+              "3679",
+              "16495",
+              "",
+              "AB",
+              "41403269"
+            ],
+            [
+              "26",
+              "1",
+              "1997-01-13",
+              "PRIJEM",
+              "PREVOD Z UCTU",
+              "3679",
+              "15087",
+              "",
+              "AB",
+              "41403269"
+            ],
+            [
+              "27",
+              "1",
+              "1997-02-13",
+              "PRIJEM",
+              "PREVOD Z UCTU",
+              "3679",
+              "15745",
+              "",
+              "AB",
+              "41403269"
+            ],
+            [
+              "28",
+              "1",
+              "1997-03-13",
+              "PRIJEM",
+              "PREVOD Z UCTU",
+              "3679",
+              "15815",
+              "",
+              "AB",
+              "41403269"
+            ],
+            [
+              "29",
+              "1",
+              "1997-04-13",
+              "PRIJEM",
+              "PREVOD Z UCTU",
+              "3679",
+              "12480",
+              "",
+              "AB",
+              "41403269"
+            ],
+            [
+              "30",
+              "1",
+              "1997-05-13",
+              "PRIJEM",
+              "PREVOD Z UCTU",
+              "3679",
+              "13742",
+              "",
+              "AB",
+              "41403269"
+            ],
+            [
+              "31",
+              "1",
+              "1997-06-13",
+              "PRIJEM",
+              "PREVOD Z UCTU",
+              "3679",
+              "13838",
+              "",
+              "AB",
+              "41403269"
+            ],
+            [
+              "32",
+              "1",
+              "1997-07-13",
+              "PRIJEM",
+              "PREVOD Z UCTU",
+              "3679",
+              "16606",
+              "",
+              "AB",
+              "41403269"
+            ],
+            [
+              "33",
+              "1",
+              "1997-08-13",
+              "PRIJEM",
+              "PREVOD Z UCTU",
+              "3679",
+              "16682",
+              "",
+              "AB",
+              "41403269"
+            ]
+          ],
+          "row_count": 1056320
+        }
+      },
+      "ok": true,
+      "plan": "1. Read the trans.csv file to understand transaction structure\n2. Read the disp.csv file to understand account-client relationship\n3. Query for client 3356 cash withdrawals\n4. Return the answer"
+    },
+    {
+      "step_index": 4,
+      "thought": "I can see the trans.csv has transaction data with columns: trans_id, account_id, date, type, operation, amount, balance, k_symbol, bank, account. I need to find withdrawal operations. Let me check the disp.csv to understand account-client relationships, and also look for withdrawal-related operations.",
+      "action": "read_csv",
+      "action_input": {
+        "path": "csv/disp.csv",
+        "max_rows": 20
+      },
+      "raw_response": "\n\n```json\n{\"thought\":\"I can see the trans.csv has transaction data with columns: trans_id, account_id, date, type, operation, amount, balance, k_symbol, bank, account. I need to find withdrawal operations. Let me check the disp.csv to understand account-client relationships, and also look for withdrawal-related operations.\",\"plan\":\"1. Read disp.csv to understand account-client relationship\\n2. Search for withdrawal operations in trans.csv\\n3. Query for client 3356 cash withdrawals\\n4. Return the answer\",\"action\":\"read_csv\",\"action_input\":{\"path\":\"csv/disp.csv\",\"max_rows\":20}}\n```",
+      "observation": {
+        "ok": true,
+        "tool": "read_csv",
+        "content": {
+          "path": "csv/disp.csv",
+          "columns": [
+            "disp_id",
+            "client_id",
+            "account_id",
+            "type"
+          ],
+          "rows": [
+            [
+              "1",
+              "1",
+              "1",
+              "OWNER"
+            ],
+            [
+              "2",
+              "2",
+              "2",
+              "OWNER"
+            ],
+            [
+              "3",
+              "3",
+              "2",
+              "DISPONENT"
+            ],
+            [
+              "4",
+              "4",
+              "3",
+              "OWNER"
+            ],
+            [
+              "5",
+              "5",
+              "3",
+              "DISPONENT"
+            ],
+            [
+              "6",
+              "6",
+              "4",
+              "OWNER"
+            ],
+            [
+              "7",
+              "7",
+              "5",
+              "OWNER"
+            ],
+            [
+              "8",
+              "8",
+              "6",
+              "OWNER"
+            ],
+            [
+              "9",
+              "9",
+              "7",
+              "OWNER"
+            ],
+            [
+              "10",
+              "10",
+              "8",
+              "OWNER"
+            ],
+            [
+              "11",
+              "11",
+              "8",
+              "DISPONENT"
+            ],
+            [
+              "12",
+              "12",
+              "9",
+              "OWNER"
+            ],
+            [
+              "13",
+              "13",
+              "10",
+              "OWNER"
+            ],
+            [
+              "14",
+              "14",
+              "11",
+              "OWNER"
+            ],
+            [
+              "15",
+              "15",
+              "12",
+              "OWNER"
+            ],
+            [
+              "16",
+              "16",
+              "12",
+              "DISPONENT"
+            ],
+            [
+              "17",
+              "17",
+              "13",
+              "OWNER"
+            ],
+            [
+              "18",
+              "18",
+              "13",
+              "DISPONENT"
+            ],
+            [
+              "19",
+              "19",
+              "14",
+              "OWNER"
+            ],
+            [
+              "20",
+              "20",
+              "15",
+              "OWNER"
+            ]
+          ],
+          "row_count": 5369
+        }
+      },
+      "ok": true,
+      "plan": "1. Read disp.csv to understand account-client relationship\n2. Search for withdrawal operations in trans.csv\n3. Query for client 3356 cash withdrawals\n4. Return the answer"
+    },
+    {
+      "step_index": 5,
+      "thought": "I understand the data structure. disp.csv links client_id to account_id. trans.csv has transactions with operation field. I need to find withdrawal operations for client 3356. Let me check what operations exist and find the withdrawal type.",
+      "action": "execute_context_sql",
+      "action_input": {
+        "path": "csv/trans.csv",
+        "sql": "SELECT DISTINCT operation FROM trans.csv WHERE operation LIKE '%%' LIMIT 50"
+      },
+      "raw_response": "\n\n```json\n{\"thought\":\"I understand the data structure. disp.csv links client_id to account_id. trans.csv has transactions with operation field. I need to find withdrawal operations for client 3356. Let me check what operations exist and find the withdrawal type.\",\"plan\":\"1. Check unique operations in trans.csv to find withdrawal types\\n2. Query for client 3356 cash withdrawals using SQL\\n3. Return the answer\",\"action\":\"execute_context_sql\",\"action_input\":{\"path\":\"csv/trans.csv\",\"sql\":\"SELECT DISTINCT operation FROM trans.csv WHERE operation LIKE '%%' LIMIT 50\"}}\n```",
+      "observation": {
+        "ok": false,
+        "error": "file is not a database"
+      },
+      "ok": false,
+      "plan": "1. Check unique operations in trans.csv to find withdrawal types\n2. Query for client 3356 cash withdrawals using SQL\n3. Return the answer"
+    },
+    {
+      "step_index": 6,
+      "thought": "",
+      "action": "__error__",
+      "action_input": {},
+      "raw_response": "\n\n```json\n{\"thought\":\"I need to use Python to process the CSV files since execute_context_sql requires SQLite. Let me find withdrawal operations for client 3356.\",\"plan\":\"1. Use Python to read the CSV files\\n2. Find withdrawal operations for client 3356\\n3. Return the answer\",\"action\":\"execute_python\",\"action_input\":\"import csv\\n\\n# Read disp.csv to get account_ids for client 3356\\nclient_accounts = set()\\nwith open('csv/disp.csv', 'r') as f:\\n    reader = csv.DictReader(f)\\n    for row in reader:\\n        if row['client_id'] == '3356':\\n            client_accounts.add(row['account_id'])\\n\\nprint(f'Client 3356 accounts: {client_accounts}')\\n\\n# Read trans.csv and find withdrawals for these accounts\\nwithdrawals = []\\nwith open('csv/trans.csv', 'r') as f:\\n    reader = csv.DictReader(f)\\n    for row in reader:\\n        if row['account_id'] in client_accounts:\\n            if 'withdraw' in row['operation'].lower() or 'VYDAJ' in row['operation'] or 'VYBER' in row['operation']:\\n                withdrawals.append(row)\\n\\nprint(f'Found {len(withdrawals)} withdrawals')\\nif withdrawals:\\n    print('First 5 withdrawals:', withdrawals[:5])\"}\n```",
+      "observation": {
+        "ok": false,
+        "error": "action_input must be a JSON object."
+      },
+      "ok": false,
+      "plan": ""
+    },
+    {
+      "step_index": 7,
+      "thought": "",
+      "action": "__error__",
+      "action_input": {},
+      "raw_response": "\n\n```json\n{\"thought\":\"I need to use Python to process the CSV files since execute_context_sql requires SQLite. Let me find withdrawal operations for client 3356.\",\"plan\":\"1. Use Python to read the CSV files\\n2. Find withdrawal operations for client 3356\\n3. Return the answer\",\"action\":\"execute_python\",\"action_input\":\"import csv\\n\\n# Read disp.csv to get account_ids for client 3356\\nclient_accounts = set()\\nwith open('csv/disp.csv', 'r') as f:\\n    reader = csv.DictReader(f)\\n    for row in reader:\\n        if row['client_id'] == '3356':\\n            client_accounts.add(row['account_id'])\\n\\nprint('Client 3356 accounts:', client_accounts)\\n\\n# Read trans.csv and find withdrawals for these accounts\\nwithdrawals = []\\nwith open('csv/trans.csv', 'r') as f:\\n    reader = csv.DictReader(f)\\n    for row in reader:\\n        if row['account_id'] in client_accounts:\\n            if 'withdraw' in row['operation'].lower() or 'VYDAJ' in row['operation'] or 'VYBER' in row['operation']:\\n                withdrawals.append(row)\\n\\nprint('Found', len(withdrawals), 'withdrawals')\\nif withdrawals:\\n    print('First 5 withdrawals:', withdrawals[:5])\"}\n```",
+      "observation": {
+        "ok": false,
+        "error": "action_input must be a JSON object."
+      },
+      "ok": false,
+      "plan": ""
+    },
+    {
+      "step_index": 8,
+      "thought": "",
+      "action": "__error__",
+      "action_input": {},
+      "raw_response": "\n\n```json\n{\"thought\": \"I need to use Python to process the CSV files since execute_context_sql requires SQLite. Let me find withdrawal operations for client 3356.\", \"plan\": \"1. Use Python to read the CSV files\\n2. Find withdrawal operations for client 3356\\n3. Return the answer\", \"action\": \"execute_python\", \"action_input\": \"import csv\\n\\nclient_accounts = set()\\nwith open('csv/disp.csv', 'r') as f:\\n    reader = csv.DictReader(f)\\n    for row in reader:\\n        if row['client_id'] == '3356':\\n            client_accounts.add(row['account_id'])\\n\\nprint('Client 3356 accounts:', client_accounts)\\n\\nwithdrawals = []\\nwith open('csv/trans.csv', 'r') as f:\\n    reader = csv.DictReader(f)\\n    for row in reader:\\n        if row['account_id'] in client_accounts:\\n            if 'VYDAJ' in row['operation'] or 'VYBER' in row['operation']:\\n                withdrawals.append(row)\\n\\nprint('Found', len(withdrawals), 'withdrawals')\\nif withdrawals:\\n    print('First 5:', withdrawals[:5])\"}\n```",
+      "observation": {
+        "ok": false,
+        "error": "action_input must be a JSON object."
+      },
+      "ok": false,
+      "plan": ""
+    },
+    {
+      "step_index": 9,
+      "thought": "I need to use Python to process the CSV files. Let me find withdrawal operations for client 3356.",
+      "action": "execute_python",
+      "action_input": {
+        "code": "import csv\n\nclient_accounts = set()\nwith open('csv/disp.csv', 'r') as f:\n    reader = csv.DictReader(f)\n    for row in reader:\n        if row['client_id'] == '3356':\n            client_accounts.add(row['account_id'])\n\nprint('Client 3356 accounts:', client_accounts)\n\nwithdrawals = []\nwith open('csv/trans.csv', 'r') as f:\n    reader = csv.DictReader(f)\n    for row in reader:\n        if row['account_id'] in client_accounts:\n            if 'VYDAJ' in row['operation'] or 'VYBER' in row['operation']:\n                withdrawals.append(row)\n\nprint('Found', len(withdrawals), 'withdrawals')\nif withdrawals:\n    print('First 5:', withdrawals[:5])"
+      },
+      "raw_response": "\n\n```json\n{\"thought\": \"I need to use Python to process the CSV files. Let me find withdrawal operations for client 3356.\", \"plan\": \"1. Use Python to read the CSV files\\n2. Find withdrawal operations for client 3356\\n3. Return the answer\", \"action\": \"execute_python\", \"action_input\": {\"code\": \"import csv\\n\\nclient_accounts = set()\\nwith open('csv/disp.csv', 'r') as f:\\n    reader = csv.DictReader(f)\\n    for row in reader:\\n        if row['client_id'] == '3356':\\n            client_accounts.add(row['account_id'])\\n\\nprint('Client 3356 accounts:', client_accounts)\\n\\nwithdrawals = []\\nwith open('csv/trans.csv', 'r') as f:\\n    reader = csv.DictReader(f)\\n    for row in reader:\\n        if row['account_id'] in client_accounts:\\n            if 'VYDAJ' in row['operation'] or 'VYBER' in row['operation']:\\n                withdrawals.append(row)\\n\\nprint('Found', len(withdrawals), 'withdrawals')\\nif withdrawals:\\n    print('First 5:', withdrawals[:5])\"}}\n```",
+      "observation": {
+        "ok": true,
+        "tool": "execute_python",
+        "content": {
+          "success": true,
+          "output": "Client 3356 accounts: {'2779'}\nFound 152 withdrawals\nFirst 5: [{'trans_id': '816173', 'account_id': '2779', 'date': '1993-12-02', 'type': 'VYDAJ', 'operation': 'VYBER', 'amount': '800', 'balance': '42072', 'k_symbol': '', 'bank': '', 'account': ''}, {'trans_id': '816174', 'account_id': '2779', 'date': '1994-12-29', 'type': 'VYDAJ', 'operation': 'VYBER', 'amount': '2400', 'balance': '59207', 'k_symbol': '', 'bank': '', 'account': ''}, {'trans_id': '816175', 'account_id': '2779', 'date': '1995-12-05', 'type': 'VYDAJ', 'operation': 'VYBER', 'amount': '4320', 'balance': '45682', 'k_symbol': '', 'bank': '', 'account': ''}, {'trans_id': '816176', 'account_id': '2779', 'date': '1996-12-01', 'type': 'VYDAJ', 'operation': 'VYBER KARTOU', 'amount': '1400', 'balance': '56704', 'k_symbol': '', 'bank': '', 'account': '0'}, {'trans_id': '816177', 'account_id': '2779', 'date': '1997-12-29', 'type': 'VYDAJ', 'operation': 'VYBER KARTOU', 'amount': '1600', 'balance': '75777', 'k_symbol': '', 'bank': '', 'account': '0'}]\n",
+          "stderr": ""
+        }
+      },
+      "ok": true,
+      "plan": "1. Use Python to read the CSV files\n2. Find withdrawal operations for client 3356\n3. Return the answer"
+    },
+    {
+      "step_index": 10,
+      "thought": "I found 152 withdrawals for client 3356 (account 2779) with type VYDAJ. I need to return all these withdrawals with the relevant columns.",
+      "action": "execute_python",
+      "action_input": {
+        "code": "import csv\nimport json\n\nclient_accounts = set()\nwith open('csv/disp.csv', 'r') as f:\n    reader = csv.DictReader(f)\n    for row in reader:\n        if row['client_id'] == '3356':\n            client_accounts.add(row['account_id'])\n\nwithdrawals = []\nwith open('csv/trans.csv', 'r') as f:\n    reader = csv.DictReader(f)\n    for row in reader:\n        if row['account_id'] in client_accounts:\n            if row['type'] == 'VYDAJ':\n                withdrawals.append([row['trans_id'], row['account_id'], row['date'], row['type'], row['operation'], row['amount'], row['balance']])\n\nresult = {'columns': ['trans_id', 'account_id', 'date', 'type', 'operation', 'amount', 'balance'], 'rows': withdrawals}\nprint(json.dumps(result))"
+      },
+      "raw_response": "\n\n```json\n{\"thought\": \"I found 152 withdrawals for client 3356 (account 2779) with type VYDAJ. I need to return all these withdrawals with the relevant columns.\", \"plan\": \"Get all withdrawal records for client 3356 and return them with key columns.\", \"action\": \"execute_python\", \"action_input\": {\"code\": \"import csv\\nimport json\\n\\nclient_accounts = set()\\nwith open('csv/disp.csv', 'r') as f:\\n    reader = csv.DictReader(f)\\n    for row in reader:\\n        if row['client_id'] == '3356':\\n            client_accounts.add(row['account_id'])\\n\\nwithdrawals = []\\nwith open('csv/trans.csv', 'r') as f:\\n    reader = csv.DictReader(f)\\n    for row in reader:\\n        if row['account_id'] in client_accounts:\\n            if row['type'] == 'VYDAJ':\\n                withdrawals.append([row['trans_id'], row['account_id'], row['date'], row['type'], row['operation'], row['amount'], row['balance']])\\n\\nresult = {'columns': ['trans_id', 'account_id', 'date', 'type', 'operation', 'amount', 'balance'], 'rows': withdrawals}\\nprint(json.dumps(result))\"}}\n```",
+      "observation": {
+        "ok": true,
+        "tool": "execute_python",
+        "content": {
+          "success": true,
+          "output": "{\"columns\": [\"trans_id\", \"account_id\", \"date\", \"type\", \"operation\", \"amount\", \"balance\"], \"rows\": [[\"815896\", \"2779\", \"1993-12-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"33805\"], [\"815897\", \"2779\", \"1994-01-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"35819\"], [\"815898\", \"2779\", \"1994-02-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"29602\"], [\"815899\", \"2779\", \"1994-03-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"32389\"], [\"815900\", \"2779\", \"1994-04-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"31133\"], [\"815901\", \"2779\", \"1994-05-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"21361\"], [\"815902\", \"2779\", \"1994-06-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"25288\"], [\"815903\", \"2779\", \"1994-07-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"45414\"], [\"815904\", \"2779\", \"1994-08-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"46516\"], [\"815905\", \"2779\", \"1994-09-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"39554\"], [\"815906\", \"2779\", \"1994-10-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"45746\"], [\"815907\", \"2779\", \"1994-11-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"45642\"], [\"815908\", \"2779\", \"1994-12-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"47849\"], [\"815909\", \"2779\", \"1995-01-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"51169\"], [\"815910\", \"2779\", \"1995-02-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"36881\"], [\"815911\", \"2779\", \"1995-03-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"46077\"], [\"815912\", \"2779\", \"1995-04-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"44844\"], [\"815913\", \"2779\", \"1995-05-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"54070\"], [\"815914\", \"2779\", \"1995-06-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"37855\"], [\"815915\", \"2779\", \"1995-07-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"41089\"], [\"815916\", \"2779\", \"1995-08-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"39301\"], [\"815917\", \"2779\", \"1995-09-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"40807\"], [\"815918\", \"2779\", \"1995-10-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"42016\"], [\"815919\", \"2779\", \"1995-11-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"40531\"], [\"815920\", \"2779\", \"1995-12-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"37420\"], [\"815921\", \"2779\", \"1996-01-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"44096\"], [\"815922\", \"2779\", \"1996-02-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"41720\"], [\"815923\", \"2779\", \"1996-03-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"44327\"], [\"815924\", \"2779\", \"1996-04-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"43208\"], [\"815925\", \"2779\", \"1996-05-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"46926\"], [\"815926\", \"2779\", \"1996-06-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"49254\"], [\"815927\", \"2779\", \"1996-07-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"53368\"], [\"815928\", \"2779\", \"1996-08-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"47619\"], [\"815929\", \"2779\", \"1996-09-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"48847\"], [\"815930\", \"2779\", \"1996-10-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"46578\"], [\"815931\", \"2779\", \"1996-11-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"47610\"], [\"815932\", \"2779\", \"1996-12-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"48437\"], [\"815933\", \"2779\", \"1997-01-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"55042\"], [\"815934\", \"2779\", \"1997-02-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"55597\"], [\"815935\", \"2779\", \"1997-03-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"54052\"], [\"815936\", \"2779\", \"1997-04-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"51304\"], [\"815937\", \"2779\", \"1997-05-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"53344\"], [\"815938\", \"2779\", \"1997-06-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"59096\"], [\"815939\", \"2779\", \"1997-07-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"62738\"], [\"815940\", \"2779\", \"1997-08-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"63622\"], [\"815941\", \"2779\", \"1997-09-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"65911\"], [\"815942\", \"2779\", \"1997-10-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"62402\"], [\"815943\", \"2779\", \"1997-11-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"62281\"], [\"815944\", \"2779\", \"1997-12-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"63159\"], [\"815945\", \"2779\", \"1998-01-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"67814\"], [\"815946\", \"2779\", \"1998-02-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"61545\"], [\"815947\", \"2779\", \"1998-03-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"64421\"], [\"815948\", \"2779\", \"1998-04-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"64708\"], [\"815949\", \"2779\", \"1998-05-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"63092\"], [\"815950\", \"2779\", \"1998-06-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"64371\"], [\"815951\", \"2779\", \"1998-07-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"67923\"], [\"815952\", \"2779\", \"1998-08-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"65115\"], [\"815953\", \"2779\", \"1998-09-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"65199\"], [\"815954\", \"2779\", \"1998-10-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"71193\"], [\"815955\", \"2779\", \"1998-11-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"73404\"], [\"815956\", \"2779\", \"1998-12-06\", \"VYDAJ\", \"PREVOD NA UCET\", \"8262\", \"72016\"], [\"815968\", \"2779\", \"1993-12-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"33771\"], [\"815969\", \"2779\", \"1994-01-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"35785\"], [\"815970\", \"2779\", \"1994-02-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"29558\"], [\"815971\", \"2779\", \"1994-03-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"32355\"], [\"815972\", \"2779\", \"1994-04-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"31089\"], [\"815973\", \"2779\", \"1994-05-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"21327\"], [\"815974\", \"2779\", \"1994-06-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"25254\"], [\"815975\", \"2779\", \"1994-07-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"45380\"], [\"815976\", \"2779\", \"1994-08-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"46472\"], [\"815977\", \"2779\", \"1994-09-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"39510\"], [\"815978\", \"2779\", \"1994-10-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"45702\"], [\"815979\", \"2779\", \"1994-11-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"38598\"], [\"815980\", \"2779\", \"1994-12-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"47805\"], [\"815981\", \"2779\", \"1995-01-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"40735\"], [\"815982\", \"2779\", \"1995-02-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"36847\"], [\"815983\", \"2779\", \"1995-03-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"40093\"], [\"815984\", \"2779\", \"1995-04-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"44810\"], [\"815985\", \"2779\", \"1995-05-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"44126\"], [\"815986\", \"2779\", \"1995-06-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"37821\"], [\"815987\", \"2779\", \"1995-07-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"41045\"], [\"815988\", \"2779\", \"1995-08-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"39267\"], [\"815989\", \"2779\", \"1995-09-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"40763\"], [\"815990\", \"2779\", \"1995-10-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"41972\"], [\"815991\", \"2779\", \"1995-11-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"40487\"], [\"815992\", \"2779\", \"1995-12-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"37376\"], [\"815993\", \"2779\", \"1996-01-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"44062\"], [\"815994\", \"2779\", \"1996-02-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"41676\"], [\"815995\", \"2779\", \"1996-03-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"44283\"], [\"815996\", \"2779\", \"1996-04-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"43174\"], [\"815997\", \"2779\", \"1996-05-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"46882\"], [\"815998\", \"2779\", \"1996-06-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"49220\"], [\"815999\", \"2779\", \"1996-07-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"53334\"], [\"816000\", \"2779\", \"1996-08-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"47585\"], [\"816001\", \"2779\", \"1996-09-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"48803\"], [\"816002\", \"2779\", \"1996-10-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"46544\"], [\"816003\", \"2779\", \"1996-11-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"47576\"], [\"816004\", \"2779\", \"1996-12-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"48393\"], [\"816005\", \"2779\", \"1997-01-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"54998\"], [\"816006\", \"2779\", \"1997-02-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"55553\"], [\"816007\", \"2779\", \"1997-03-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"54018\"], [\"816008\", \"2779\", \"1997-04-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"51270\"], [\"816009\", \"2779\", \"1997-05-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"53300\"], [\"816010\", \"2779\", \"1997-06-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"59062\"], [\"816011\", \"2779\", \"1997-07-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"62694\"], [\"816012\", \"2779\", \"1997-08-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"63578\"], [\"816013\", \"2779\", \"1997-09-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"65877\"], [\"816014\", \"2779\", \"1997-10-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"62358\"], [\"816015\", \"2779\", \"1997-11-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"62237\"], [\"816016\", \"2779\", \"1997-12-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"63125\"], [\"816017\", \"2779\", \"1998-01-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"67770\"], [\"816018\", \"2779\", \"1998-02-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"61501\"], [\"816019\", \"2779\", \"1998-03-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"64377\"], [\"816020\", \"2779\", \"1998-04-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"64664\"], [\"816021\", \"2779\", \"1998-05-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"63048\"], [\"816022\", \"2779\", \"1998-06-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"64327\"], [\"816023\", \"2779\", \"1998-07-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"67879\"], [\"816024\", \"2779\", \"1998-08-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"65071\"], [\"816025\", \"2779\", \"1998-09-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"65155\"], [\"816026\", \"2779\", \"1998-10-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"71159\"], [\"816027\", \"2779\", \"1998-11-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"73370\"], [\"816028\", \"2779\", \"1998-12-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"34\", \"71972\"], [\"816040\", \"2779\", \"1993-12-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"33761\"], [\"816041\", \"2779\", \"1994-01-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"35775\"], [\"816042\", \"2779\", \"1994-02-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"29592\"], [\"816043\", \"2779\", \"1994-03-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"32345\"], [\"816044\", \"2779\", \"1994-04-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"31123\"], [\"816045\", \"2779\", \"1994-05-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"21317\"], [\"816046\", \"2779\", \"1994-06-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"25244\"], [\"816047\", \"2779\", \"1994-07-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"45370\"], [\"816048\", \"2779\", \"1994-08-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"46506\"], [\"816049\", \"2779\", \"1994-09-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"39544\"], [\"816050\", \"2779\", \"1994-10-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"45736\"], [\"816051\", \"2779\", \"1994-11-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"45632\"], [\"816052\", \"2779\", \"1994-12-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"47839\"], [\"816053\", \"2779\", \"1995-01-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"40725\"], [\"816054\", \"2779\", \"1995-02-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"36837\"], [\"816055\", \"2779\", \"1995-03-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"42827\"], [\"816056\", \"2779\", \"1995-04-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"44800\"], [\"816057\", \"2779\", \"1995-05-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"44160\"], [\"816058\", \"2779\", \"1995-06-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"37811\"], [\"816059\", \"2779\", \"1995-07-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"41079\"], [\"816060\", \"2779\", \"1995-08-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"39257\"], [\"816061\", \"2779\", \"1995-09-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"40797\"], [\"816062\", \"2779\", \"1995-10-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"42006\"], [\"816063\", \"2779\", \"1995-11-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"40521\"], [\"816064\", \"2779\", \"1995-12-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"37410\"], [\"816065\", \"2779\", \"1996-01-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"44052\"], [\"816066\", \"2779\", \"1996-02-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"41710\"], [\"816067\", \"2779\", \"1996-03-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"44317\"], [\"816068\", \"2779\", \"1996-04-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"43164\"], [\"816069\", \"2779\", \"1996-05-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"46916\"], [\"816070\", \"2779\", \"1996-06-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"49210\"], [\"816071\", \"2779\", \"1996-07-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"53324\"], [\"816072\", \"2779\", \"1996-08-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"47575\"], [\"816073\", \"2779\", \"1996-09-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"48837\"], [\"816074\", \"2779\", \"1996-10-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"46534\"], [\"816075\", \"2779\", \"1996-11-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"47566\"], [\"816076\", \"2779\", \"1996-12-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"48427\"], [\"816077\", \"2779\", \"1997-01-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"55032\"], [\"816078\", \"2779\", \"1997-02-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"55587\"], [\"816079\", \"2779\", \"1997-03-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"54008\"], [\"816080\", \"2779\", \"1997-04-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"51260\"], [\"816081\", \"2779\", \"1997-05-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"53334\"], [\"816082\", \"2779\", \"1997-06-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"59052\"], [\"816083\", \"2779\", \"1997-07-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"62728\"], [\"816084\", \"2779\", \"1997-08-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"63612\"], [\"816085\", \"2779\", \"1997-09-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"65867\"], [\"816086\", \"2779\", \"1997-10-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"62392\"], [\"816087\", \"2779\", \"1997-11-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"62271\"], [\"816088\", \"2779\", \"1997-12-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"63115\"], [\"816089\", \"2779\", \"1998-01-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"67804\"], [\"816090\", \"2779\", \"1998-02-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"61535\"], [\"816091\", \"2779\", \"1998-03-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"64411\"], [\"816092\", \"2779\", \"1998-04-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"64698\"], [\"816093\", \"2779\", \"1998-05-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"63082\"], [\"816094\", \"2779\", \"1998-06-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"64361\"], [\"816095\", \"2779\", \"1998-07-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"67913\"], [\"816096\", \"2779\", \"1998-08-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"65105\"], [\"816097\", \"2779\", \"1998-09-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"65189\"], [\"816098\", \"2779\", \"1998-10-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"71149\"], [\"816099\", \"2779\", \"1998-11-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"73360\"], [\"816100\", \"2779\", \"1998-12-07\", \"VYDAJ\", \"PREVOD NA UCET\", \"10\", \"72006\"], [\"816112\", \"2779\", \"1993-12-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"42067\"], [\"816113\", \"2779\", \"1994-01-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"44081\"], [\"816114\", \"2779\", \"1994-02-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"37864\"], [\"816115\", \"2779\", \"1994-03-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"40651\"], [\"816116\", \"2779\", \"1994-04-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"39395\"], [\"816117\", \"2779\", \"1994-05-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"29623\"], [\"816118\", \"2779\", \"1994-06-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"33550\"], [\"816119\", \"2779\", \"1994-07-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"53676\"], [\"816120\", \"2779\", \"1994-08-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"54778\"], [\"816121\", \"2779\", \"1994-09-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"47816\"], [\"816122\", \"2779\", \"1994-10-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"54008\"], [\"816123\", \"2779\", \"1994-11-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"53904\"], [\"816124\", \"2779\", \"1994-12-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"56111\"], [\"816125\", \"2779\", \"1995-01-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"59431\"], [\"816126\", \"2779\", \"1995-02-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"45143\"], [\"816127\", \"2779\", \"1995-03-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"54339\"], [\"816128\", \"2779\", \"1995-04-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"57606\"], [\"816129\", \"2779\", \"1995-05-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"62332\"], [\"816130\", \"2779\", \"1995-06-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"59017\"], [\"816131\", \"2779\", \"1995-07-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"49351\"], [\"816132\", \"2779\", \"1995-08-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"47563\"], [\"816133\", \"2779\", \"1995-09-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"49069\"], [\"816134\", \"2779\", \"1995-10-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"50278\"], [\"816135\", \"2779\", \"1995-11-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"48793\"], [\"816136\", \"2779\", \"1995-12-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"50002\"], [\"816137\", \"2779\", \"1996-01-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"52358\"], [\"816138\", \"2779\", \"1996-02-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"49982\"], [\"816139\", \"2779\", \"1996-03-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"52589\"], [\"816140\", \"2779\", \"1996-04-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"51470\"], [\"816141\", \"2779\", \"1996-05-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"55188\"], [\"816142\", \"2779\", \"1996-06-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"57516\"], [\"816143\", \"2779\", \"1996-07-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"61630\"], [\"816144\", \"2779\", \"1996-08-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"55881\"], [\"816145\", \"2779\", \"1996-09-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"57109\"], [\"816146\", \"2779\", \"1996-10-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"54840\"], [\"816147\", \"2779\", \"1996-11-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"55872\"], [\"816148\", \"2779\", \"1996-12-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"56699\"], [\"816149\", \"2779\", \"1997-01-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"63304\"], [\"816150\", \"2779\", \"1997-02-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"63859\"], [\"816151\", \"2779\", \"1997-03-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"62314\"], [\"816152\", \"2779\", \"1997-04-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"59566\"], [\"816153\", \"2779\", \"1997-05-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"61606\"], [\"816154\", \"2779\", \"1997-06-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"67358\"], [\"816155\", \"2779\", \"1997-07-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"71000\"], [\"816156\", \"2779\", \"1997-08-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"71884\"], [\"816157\", \"2779\", \"1997-09-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"74173\"], [\"816158\", \"2779\", \"1997-10-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"70664\"], [\"816159\", \"2779\", \"1997-11-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"70543\"], [\"816160\", \"2779\", \"1997-12-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"71421\"], [\"816161\", \"2779\", \"1998-01-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"76076\"], [\"816162\", \"2779\", \"1998-02-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"69807\"], [\"816163\", \"2779\", \"1998-03-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"72683\"], [\"816164\", \"2779\", \"1998-04-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"72970\"], [\"816165\", \"2779\", \"1998-05-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"71354\"], [\"816166\", \"2779\", \"1998-06-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"72633\"], [\"816167\", \"2779\", \"1998-07-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"76185\"], [\"816168\", \"2779\", \"1998-08-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"73377\"], [\"816169\", \"2779\", \"1998-09-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"73461\"], [\"816170\", \"2779\", \"1998-10-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"79455\"], [\"816171\", \"2779\", \"1998-11-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"81666\"], [\"816172\", \"2779\", \"1998-12-05\", \"VYDAJ\", \"PREVOD NA UCET\", \"5\", \"80278\"], [\"816173\", \"2779\", \"1993-12-02\", \"VYDAJ\", \"VYBER\", \"800\", \"42072\"], [\"816174\", \"2779\", \"1994-12-29\", \"VYDAJ\", \"VYBER\", \"2400\", \"59207\"], [\"816175\", \"2779\", \"1995-12-05\", \"VYDAJ\", \"VYBER\", \"4320\", \"45682\"], [\"816176\", \"2779\", \"1996-12-01\", \"VYDAJ\", \"VYBER KARTOU\", \"1400\", \"56704\"], [\"816177\", \"2779\", \"1997-12-29\", \"VYDAJ\", \"VYBER KARTOU\", \"1600\", \"75777\"], [\"816178\", \"2779\", \"1998-12-23\", \"VYDAJ\", \"VYBER KARTOU\", \"3700\", \"77834\"], [\"816181\", \"2779\", \"1993-11-20\", \"VYDAJ\", \"VYBER\", \"600\", \"42711\"], [\"816185\", \"2779\", \"1994-02-24\", \"VYDAJ\", \"VYBER\", \"3480\", \"40506\"], [\"816186\", \"2779\", \"1994-12-17\", \"VYDAJ\", \"VYBER\", \"1560\", \"61607\"], [\"816187\", \"2779\", \"1994-09-01\", \"VYDAJ\", \"VYBER\", \"1440\", \"47821\"], [\"816188\", \"2779\", \"1994-08-28\", \"VYDAJ\", \"VYBER\", \"4680\", \"49060\"], [\"816189\", \"2779\", \"1994-08-17\", \"VYDAJ\", \"VYBER\", \"1440\", \"53740\"], [\"816190\", \"2779\", \"1994-02-09\", \"VYDAJ\", \"VYBER\", \"2880\", \"26678\"], [\"816191\", \"2779\", \"1994-05-03\", \"VYDAJ\", \"VYBER\", \"5400\", \"29628\"], [\"816192\", \"2779\", \"1995-05-26\", \"VYDAJ\", \"VYBER\", \"2640\", \"58794\"], [\"816193\", \"2779\", \"1995-06-25\", \"VYDAJ\", \"VYBER\", \"5040\", \"58733\"], [\"816194\", \"2779\", \"1995-03-06\", \"VYDAJ\", \"VYBER\", \"3240\", \"42837\"], [\"816195\", \"2779\", \"1996-03-25\", \"VYDAJ\", \"VYBER\", \"3240\", \"58351\"], [\"816196\", \"2779\", \"1996-10-10\", \"VYDAJ\", \"VYBER\", \"4680\", \"41854\"], [\"816197\", \"2779\", \"1997-07-19\", \"VYDAJ\", \"VYBER KARTOU\", \"700\", \"79302\"], [\"816198\", \"2779\", \"1997-09-27\", \"VYDAJ\", \"VYBER KARTOU\", \"1400\", \"70375\"], [\"816199\", \"2779\", \"1997-10-20\", \"VYDAJ\", \"VYBER KARTOU\", \"1900\", \"77766\"], [\"816200\", \"2779\", \"1997-03-26\", \"VYDAJ\", \"VYBER KARTOU\", \"3800\", \"59316\"], [\"816201\", \"2779\", \"1998-03-26\", \"VYDAJ\", \"VYBER KARTOU\", \"2200\", \"72685\"], [\"816202\", \"2779\", \"1998-05-11\", \"VYDAJ\", \"VYBER KARTOU\", \"800\", \"79556\"], [\"816203\", \"2779\", \"1998-01-24\", \"VYDAJ\", \"VYBER\", \"4560\", \"69518\"], [\"816204\", \"2779\", \"1998-01-19\", \"VYDAJ\", \"VYBER KARTOU\", \"4000\", \"81078\"], [\"816216\", \"2779\", \"1993-11-30\", \"VYDAJ\", \"VYBER\", \"15\", \"42872\"], [\"816217\", \"2779\", \"1993-12-31\", \"VYDAJ\", \"VYBER\", \"15\", \"44086\"], [\"816218\", \"2779\", \"1994-01-31\", \"VYDAJ\", \"VYBER\", \"15\", \"37869\"], [\"816219\", \"2779\", \"1994-02-28\", \"VYDAJ\", \"VYBER\", \"15\", \"40656\"], [\"816220\", \"2779\", \"1994-03-31\", \"VYDAJ\", \"VYBER\", \"15\", \"39400\"], [\"816221\", \"2779\", \"1994-04-30\", \"VYDAJ\", \"VYBER\", \"15\", \"35028\"], [\"816222\", \"2779\", \"1994-05-31\", \"VYDAJ\", \"VYBER\", \"15\", \"33555\"], [\"816223\", \"2779\", \"1994-06-30\", \"VYDAJ\", \"VYBER\", \"15\", \"53681\"], [\"816224\", \"2779\", \"1994-07-31\", \"VYDAJ\", \"VYBER\", \"15\", \"54783\"], [\"816225\", \"2779\", \"1994-08-31\", \"VYDAJ\", \"VYBER\", \"15\", \"49261\"], [\"816226\", \"2779\", \"1994-09-30\", \"VYDAJ\", \"VYBER\", \"15\", \"54013\"], [\"816227\", \"2779\", \"1994-10-31\", \"VYDAJ\", \"VYBER\", \"15\", \"53909\"], [\"816228\", \"2779\", \"1994-11-30\", \"VYDAJ\", \"VYBER\", \"15\", \"56116\"], [\"816229\", \"2779\", \"1994-12-31\", \"VYDAJ\", \"VYBER\", \"15\", \"59436\"], [\"816230\", \"2779\", \"1995-01-31\", \"VYDAJ\", \"VYBER\", \"15\", \"58248\"], [\"816231\", \"2779\", \"1995-02-28\", \"VYDAJ\", \"VYBER\", \"15\", \"54344\"], [\"816232\", \"2779\", \"1995-03-31\", \"VYDAJ\", \"VYBER\", \"15\", \"57611\"], [\"816233\", \"2779\", \"1995-04-30\", \"VYDAJ\", \"VYBER\", \"15\", \"62337\"], [\"816234\", \"2779\", \"1995-05-31\", \"VYDAJ\", \"VYBER\", \"15\", \"59022\"], [\"816235\", \"2779\", \"1995-06-30\", \"VYDAJ\", \"VYBER\", \"15\", \"58956\"], [\"816236\", \"2779\", \"1995-07-31\", \"VYDAJ\", \"VYBER\", \"15\", \"58568\"], [\"816237\", \"2779\", \"1995-08-31\", \"VYDAJ\", \"VYBER\", \"15\", \"56774\"], [\"816238\", \"2779\", \"1995-09-30\", \"VYDAJ\", \"VYBER\", \"15\", \"58283\"], [\"816239\", \"2779\", \"1995-10-31\", \"VYDAJ\", \"VYBER\", \"15\", \"59498\"], [\"816240\", \"2779\", \"1995-11-30\", \"VYDAJ\", \"VYBER\", \"15\", \"58007\"], [\"816241\", \"2779\", \"1995-12-31\", \"VYDAJ\", \"VYBER\", \"15\", \"63563\"], [\"816242\", \"2779\", \"1996-01-31\", \"VYDAJ\", \"VYBER\", \"15\", \"49987\"], [\"816243\", \"2779\", \"1996-02-29\", \"VYDAJ\", \"VYBER\", \"15\", \"59194\"], [\"816244\", \"2779\", \"1996-03-31\", \"VYDAJ\", \"VYBER\", \"15\", \"58575\"], [\"816245\", \"2779\", \"1996-04-30\", \"VYDAJ\", \"VYBER\", \"15\", \"60693\"], [\"816246\", \"2779\", \"1996-05-31\", \"VYDAJ\", \"VYBER\", \"15\", \"57521\"], [\"816247\", \"2779\", \"1996-06-30\", \"VYDAJ\", \"VYBER\", \"15\", \"61635\"], [\"816248\", \"2779\", \"1996-07-31\", \"VYDAJ\", \"VYBER\", \"15\", \"55886\"], [\"816249\", \"2779\", \"1996-08-31\", \"VYDAJ\", \"VYBER\", \"15\", \"57114\"], [\"816250\", \"2779\", \"1996-09-30\", \"VYDAJ\", \"VYBER\", \"15\", \"54845\"], [\"816251\", \"2779\", \"1996-10-31\", \"VYDAJ\", \"VYBER\", \"15\", \"55877\"], [\"816252\", \"2779\", \"1996-11-30\", \"VYDAJ\", \"VYBER\", \"15\", \"58104\"], [\"816253\", \"2779\", \"1996-12-31\", \"VYDAJ\", \"VYBER\", \"15\", \"63309\"], [\"816254\", \"2779\", \"1997-01-31\", \"VYDAJ\", \"VYBER\", \"15\", \"63864\"], [\"816255\", \"2779\", \"1997-02-28\", \"VYDAJ\", \"VYBER\", \"15\", \"62319\"], [\"816256\", \"2779\", \"1997-03-31\", \"VYDAJ\", \"VYBER\", \"15\", \"59571\"], [\"816257\", \"2779\", \"1997-04-30\", \"VYDAJ\", \"VYBER\", \"15\", \"61611\"], [\"816258\", \"2779\", \"1997-05-31\", \"VYDAJ\", \"VYBER\", \"15\", \"67363\"], [\"816259\", \"2779\", \"1997-06-30\", \"VYDAJ\", \"VYBER\", \"15\", \"71005\"], [\"816260\", \"2779\", \"1997-07-31\", \"VYDAJ\", \"VYBER\", \"15\", \"71889\"], [\"816261\", \"2779\", \"1997-08-31\", \"VYDAJ\", \"VYBER\", \"15\", \"74178\"], [\"816262\", \"2779\", \"1997-09-30\", \"VYDAJ\", \"VYBER\", \"15\", \"70669\"], [\"816263\", \"2779\", \"1997-10-31\", \"VYDAJ\", \"VYBER\", \"15\", \"70548\"], [\"816264\", \"2779\", \"1997-11-30\", \"VYDAJ\", \"VYBER\", \"15\", \"71426\"], [\"816265\", \"2779\", \"1997-12-31\", \"VYDAJ\", \"VYBER\", \"15\", \"76081\"], [\"816266\", \"2779\", \"1998-01-31\", \"VYDAJ\", \"VYBER\", \"15\", \"69812\"], [\"816267\", \"2779\", \"1998-02-28\", \"VYDAJ\", \"VYBER\", \"15\", \"72688\"], [\"816268\", \"2779\", \"1998-03-31\", \"VYDAJ\", \"VYBER\", \"15\", \"72975\"], [\"816269\", \"2779\", \"1998-04-30\", \"VYDAJ\", \"VYBER\", \"15\", \"71359\"], [\"816270\", \"2779\", \"1998-05-31\", \"VYDAJ\", \"VYBER\", \"15\", \"72638\"], [\"816271\", \"2779\", \"1998-06-30\", \"VYDAJ\", \"VYBER\", \"15\", \"76190\"], [\"816272\", \"2779\", \"1998-07-31\", \"VYDAJ\", \"VYBER\", \"15\", \"73382\"], [\"816273\", \"2779\", \"1998-08-31\", \"VYDAJ\", \"VYBER\", \"15\", \"73466\"], [\"816274\", \"2779\", \"1998-09-30\", \"VYDAJ\", \"VYBER\", \"15\", \"79460\"], [\"816275\", \"2779\", \"1998-10-31\", \"VYDAJ\", \"VYBER\", \"15\", \"81671\"], [\"816276\", \"2779\", \"1998-11-30\", \"VYDAJ\", \"VYBER\", \"15\", \"80283\"], [\"816278\", \"2779\", \"1993-08-14\", \"VYDAJ\", \"VYBER\", \"7900\", \"30664\"], [\"816279\", \"2779\", \"1993-09-13\", \"VYDAJ\", \"VYBER\", \"9700\", \"38384\"], [\"816280\", \"2779\", \"1993-10-13\", \"VYDAJ\", \"VYBER\", \"15600\", \"40239\"], [\"816281\", \"2779\", \"1993-11-12\", \"VYDAJ\", \"VYBER\", \"14400\", \"43311\"], [\"816282\", \"2779\", \"1993-12-12\", \"VYDAJ\", \"VYBER\", \"15800\", \"43923\"], [\"816283\", \"2779\", \"1994-01-11\", \"VYDAJ\", \"VYBER\", \"15400\", \"37683\"], [\"816284\", \"2779\", \"1994-03-12\", \"VYDAJ\", \"VYBER\", \"10400\", \"39253\"], [\"816285\", \"2779\", \"1994-04-11\", \"VYDAJ\", \"VYBER\", \"13500\", \"34897\"], [\"816286\", \"2779\", \"1994-05-11\", \"VYDAJ\", \"VYBER\", \"5200\", \"33425\"], [\"816288\", \"2779\", \"1994-07-10\", \"VYDAJ\", \"VYBER\", \"8100\", \"37270\"], [\"816289\", \"2779\", \"1994-08-09\", \"VYDAJ\", \"VYBER\", \"8600\", \"37872\"], [\"816290\", \"2779\", \"1994-09-08\", \"VYDAJ\", \"VYBER\", \"3000\", \"36510\"], [\"816291\", \"2779\", \"1994-10-08\", \"VYDAJ\", \"VYBER\", \"9300\", \"36402\"], [\"816292\", \"2779\", \"1994-11-07\", \"VYDAJ\", \"VYBER\", \"7000\", \"38632\"], [\"816293\", \"2779\", \"1994-12-07\", \"VYDAJ\", \"VYBER\", \"10600\", \"37205\"], [\"816294\", \"2779\", \"1995-01-06\", \"VYDAJ\", \"VYBER\", \"10400\", \"40769\"], [\"816295\", \"2779\", \"1995-02-05\", \"VYDAJ\", \"VYBER\", \"13100\", \"45148\"], [\"816296\", \"2779\", \"1995-03-07\", \"VYDAJ\", \"VYBER\", \"2700\", \"40127\"], [\"816297\", \"2779\", \"1995-04-06\", \"VYDAJ\", \"VYBER\", \"4500\", \"53106\"], [\"816298\", \"2779\", \"1995-05-06\", \"VYDAJ\", \"VYBER\", \"9900\", \"44170\"], [\"816299\", \"2779\", \"1995-06-05\", \"VYDAJ\", \"VYBER\", \"12900\", \"46117\"], [\"816300\", \"2779\", \"1995-07-05\", \"VYDAJ\", \"VYBER\", \"9600\", \"49356\"], [\"816301\", \"2779\", \"1995-08-04\", \"VYDAJ\", \"VYBER\", \"11000\", \"47568\"], [\"816302\", \"2779\", \"1995-09-03\", \"VYDAJ\", \"VYBER\", \"7700\", \"49074\"], [\"816303\", \"2779\", \"1995-10-03\", \"VYDAJ\", \"VYBER\", \"8000\", \"50283\"], [\"816304\", \"2779\", \"1995-11-02\", \"VYDAJ\", \"VYBER\", \"10700\", \"48798\"], [\"816305\", \"2779\", \"1995-12-02\", \"VYDAJ\", \"VYBER\", \"8000\", \"50007\"], [\"816306\", \"2779\", \"1996-01-01\", \"VYDAJ\", \"VYBER\", \"11200\", \"52363\"], [\"816307\", \"2779\", \"1996-01-31\", \"VYDAJ\", \"VYBER\", \"11600\", \"50001\"], [\"816308\", \"2779\", \"1996-03-01\", \"VYDAJ\", \"VYBER\", \"6600\", \"52594\"], [\"816309\", \"2779\", \"1996-03-31\", \"VYDAJ\", \"VYBER\", \"7100\", \"51475\"], [\"816310\", \"2779\", \"1996-04-30\", \"VYDAJ\", \"VYBER\", \"5500\", \"55193\"], [\"816311\", \"2779\", \"1996-05-30\", \"VYDAJ\", \"VYBER\", \"6900\", \"57290\"], [\"816312\", \"2779\", \"1996-06-29\", \"VYDAJ\", \"VYBER\", \"13800\", \"61372\"], [\"816313\", \"2779\", \"1996-07-29\", \"VYDAJ\", \"VYBER\", \"15000\", \"55632\"], [\"816314\", \"2779\", \"1996-08-28\", \"VYDAJ\", \"VYBER\", \"8000\", \"56883\"], [\"816315\", \"2779\", \"1996-09-27\", \"VYDAJ\", \"VYBER\", \"11500\", \"54611\"], [\"816316\", \"2779\", \"1996-10-27\", \"VYDAJ\", \"VYBER\", \"3500\", \"55662\"], [\"816317\", \"2779\", \"1996-11-26\", \"VYDAJ\", \"VYBER\", \"7000\", \"57874\"], [\"816318\", \"2779\", \"1996-12-26\", \"VYDAJ\", \"VYBER\", \"11300\", \"63055\"], [\"816319\", \"2779\", \"1997-01-25\", \"VYDAJ\", \"VYBER\", \"8700\", \"63606\"], [\"816320\", \"2779\", \"1997-02-24\", \"VYDAJ\", \"VYBER\", \"10800\", \"62061\"], [\"816321\", \"2779\", \"1997-03-26\", \"VYDAJ\", \"VYBER\", \"8200\", \"63116\"], [\"816322\", \"2779\", \"1997-04-25\", \"VYDAJ\", \"VYBER\", \"7200\", \"61368\"], [\"816323\", \"2779\", \"1997-05-25\", \"VYDAJ\", \"VYBER KARTOU\", \"3500\", \"67108\"], [\"816324\", \"2779\", \"1997-06-24\", \"VYDAJ\", \"VYBER\", \"14300\", \"70714\"], [\"816325\", \"2779\", \"1997-07-24\", \"VYDAJ\", \"VYBER\", \"7700\", \"71602\"], [\"816326\", \"2779\", \"1997-08-23\", \"VYDAJ\", \"VYBER\", \"7000\", \"73886\"], [\"816327\", \"2779\", \"1997-09-22\", \"VYDAJ\", \"VYBER\", \"11400\", \"71775\"], [\"816328\", \"2779\", \"1997-10-22\", \"VYDAJ\", \"VYBER\", \"7500\", \"70266\"], [\"816329\", \"2779\", \"1997-11-21\", \"VYDAJ\", \"VYBER\", \"8400\", \"71145\"], [\"816330\", \"2779\", \"1997-12-21\", \"VYDAJ\", \"VYBER\", \"11700\", \"77377\"], [\"816331\", \"2779\", \"1998-01-20\", \"VYDAJ\", \"VYBER\", \"7000\", \"74078\"], [\"816332\", \"2779\", \"1998-02-19\", \"VYDAJ\", \"VYBER\", \"6400\", \"72409\"], [\"816333\", \"2779\", \"1998-03-21\", \"VYDAJ\", \"VYBER\", \"6800\", \"74885\"], [\"816334\", \"2779\", \"1998-04-20\", \"VYDAJ\", \"VYBER\", \"10900\", \"71072\"], [\"816335\", \"2779\", \"1998-05-20\", \"VYDAJ\", \"VYBER\", \"7200\", \"72356\"], [\"816336\", \"2779\", \"1998-06-19\", \"VYDAJ\", \"VYBER\", \"14400\", \"75889\"], [\"816337\", \"2779\", \"1998-07-19\", \"VYDAJ\", \"VYBER\", \"12100\", \"73087\"], [\"816338\", \"2779\", \"1998-08-18\", \"VYDAJ\", \"VYBER\", \"9200\", \"73179\"], [\"816339\", \"2779\", \"1998-09-17\", \"VYDAJ\", \"VYBER KARTOU\", \"3300\", \"79163\"], [\"816340\", \"2779\", \"1998-10-17\", \"VYDAJ\", \"VYBER\", \"7100\", \"81357\"], [\"816341\", \"2779\", \"1998-11-16\", \"VYDAJ\", \"VYBER\", \"10700\", \"79968\"], [\"816342\", \"2779\", \"1998-12-16\", \"VYDAJ\", \"VYBER\", \"16400\", \"81534\"]]}\n",
+          "stderr": ""
+        }
+      },
+      "ok": true,
+      "plan": "Get all withdrawal records for client 3356 and return them with key columns."
+    }
+  ],
+  "failure_reason": "Task failed with uncaught error: Model request failed: Request timed out. Recovered 10 steps from checkpoint.",
+  "succeeded": false,
+  "e2e_elapsed_seconds": 562.272
+}
