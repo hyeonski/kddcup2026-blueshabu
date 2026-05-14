@@ -95,13 +95,39 @@ class OpenAIModelAdapter:
             response = client.chat.completions.create(**request_kwargs)
         except APIError as exc:
             raise RuntimeError(f"Model request failed: {exc}") from exc
-
+        """
         choices = response.choices or []
         if not choices:
             raise RuntimeError("Model response missing choices.")
         content = choices[0].message.content
         if not isinstance(content, str):
             raise RuntimeError("Model response missing text content.")
+        """
+        choices = response.choices or []
+        if not choices:
+            raise RuntimeError("Model response missing choices.")
+        
+        #content = choices[0].message.content
+        #if not isinstance(content, str):
+        #    raise RuntimeError("Model response missing text content.")
+
+        message = choices[0].message
+        content = message.content
+        
+        if not isinstance(content, str) or not content.strip():
+            reasoning = getattr(message, "reasoning_content", None)
+            if isinstance(reasoning, str) and reasoning.strip():
+                content = reasoning
+            else:
+                raw = getattr(message, "content", "") or ""
+                import re as _re
+                think_match = _re.search(r"<think>(.*?)</think>", raw, _re.DOTALL)
+                if think_match:
+                    content = think_match.group(1).strip()
+ 
+        if not isinstance(content, str) or not content.strip():
+            raise RuntimeError("Model response missing text content.")
+
         return content
 
 

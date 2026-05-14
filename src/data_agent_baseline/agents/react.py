@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -12,6 +13,8 @@ from typing import Any, Optional
 from data_agent_baseline.agents.model import ModelAdapter, ModelMessage, ModelStep, ModelAdapterLLMWrapper
 from data_agent_baseline.agents.prompt import (
     REACT_PS_SYSTEM_PROMPT,
+    ACON_SYSTEM_PROMPT,
+    ACON_HISTORY_V2_PROMPT,
     build_observation_prompt,
     build_system_prompt,
     build_task_prompt,
@@ -35,6 +38,22 @@ except ImportError:
 # react.py: ...src/data_agent_baseline/agents/react.py
 # parents[0]: agents, parents[1]: data_agent_baseline, parents[2]: src, parents[3]: PROJECT_ROOT
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _get_acon_prompt_dir() -> str:
+    """
+    Create a temporary directory with ACON jinja prompt files from prompt.py.
+    All prompts are now managed in prompt.py as string constants.
+    """
+    temp_dir = tempfile.mkdtemp(prefix="acon_prompts_")
+    
+    # system_prompt.jinja 생성
+    (Path(temp_dir) / "system_prompt.jinja").write_text(ACON_SYSTEM_PROMPT)
+    
+    # prompt_history_v2.jinja 생성
+    (Path(temp_dir) / "prompt_history_v2.jinja").write_text(ACON_HISTORY_V2_PROMPT)
+    
+    return temp_dir
 
 
 @dataclass(frozen=True, slots=True)
@@ -164,14 +183,14 @@ class ReActAgent:
         if self.config.enable_context_optimization and ACONHistoryOptimizer is not None:
             try:
                 # ACON-main의 HistoryOptimizer를 사용
-                # ACON은 config.get("history_prompt_dir", None)를 우선으로 확인
-                prompt_dir_path = str(PROJECT_ROOT / "acon-main" / "experiments" / "appworld" / "prompts" / "context_opt")
+                # 프롬프트는 prompt.py에서 관리되며 런타임에 임시 디렉토리로 생성됨
+                prompt_dir_path = _get_acon_prompt_dir()
                 
                 acon_config = {
                     "model": model.model if hasattr(model, 'model') else "qwen/qwen3.5-35b-a3b",
                     "temperature": model.temperature if hasattr(model, 'temperature') else 1.0,
                     "history_summarization_threshold": self.config.history_summarization_threshold,
-                    # ACON이 찾는 키 - config에서 우선 확인
+                    # ACON이 찾는 키
                     "history_prompt_dir": prompt_dir_path,
                     # 프롬프트 템플릿 이름 설정
                     "prompts": {
