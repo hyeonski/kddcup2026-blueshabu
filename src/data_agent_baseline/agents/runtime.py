@@ -34,16 +34,20 @@ class AgentRunResult:
     answer: AnswerTable | None
     steps: list[StepRecord]
     failure_reason: str | None
+    memory_usage: dict[str, Any] | None = None
 
     @property
     def succeeded(self) -> bool:
         return self.answer is not None and self.failure_reason is None
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload: dict[str, Any] = {
             "task_id": self.task_id,
             "answer": self.answer.to_dict() if self.answer is not None else None,
             "steps": [step.to_dict() for step in self.steps],
             "failure_reason": self.failure_reason,
             "succeeded": self.succeeded,
         }
+        if self.memory_usage is not None:
+            payload["memory_usage"] = self.memory_usage
+        return payload

@@ -16,9 +16,15 @@ from data_agent_baseline.agents.prompt import (
     build_system_prompt,
     build_task_prompt,
 )
+from data_agent_baseline.agents.observation_memory import ObservationMemory, cap_preserved_observation
 from data_agent_baseline.agents.runtime import AgentRunResult, AgentRuntimeState, StepRecord
 from data_agent_baseline.benchmark.schema import PublicTask
-from data_agent_baseline.tools.registry import ToolRegistry
+from data_agent_baseline.tools.registry import (
+    RECALL_OBSERVATION_TOOL_NAME,
+    ToolExecutionResult,
+    ToolRegistry,
+    recall_observation_spec,
+)
 
 try:
     from productive_agents.ctxopt.history_optimizer import HistoryOptimizer as ACONHistoryOptimizer
@@ -43,6 +49,13 @@ class ReActAgentConfig:
     history_summarization_threshold: int = 4000
     # 압축 시 verbatim으로 보존할 가장 최근 step 수
     preserve_last_k_steps: int = 5
+    # Observation Memory: 오래된 observation을 외부 메모리에 분리 보관하고 recall_observation으로 조회
+    enable_observation_memory: bool = False
+    memory_index_head_chars: int = 200
+    # preserved-K 윈도우 안의 observation도 N자 초과 시 잘라냄 (recall로 원본 조회 가능).
+    # 큰 출력(execute_python 등)으로 컨텍스트가 부풀어 ContextLengthExceeded가 나는 걸 방지.
+    # 0 이하면 무제한 (캡 비활성).
+    preserved_observation_max_chars: int = 5000
 
 
 CheckpointWriter = Callable[[dict[str, Any]], None]
@@ -137,6 +150,16 @@ class ReActAgent:
         # 마지막 K step 보존
         self.preserve_last_k_steps: int = self.config.preserve_last_k_steps
         self.preserved_steps: list[StepRecord] = []  # 마지막 K step 보존할 steps
+
+        # Observation Memory
+        self.observation_memory: ObservationMemory | None = None
+        if self.config.enable_observation_memory:
+            self.observation_memory = ObservationMemory(
+                head_chars=self.config.memory_index_head_chars,
+            )
+            # recall_observation spec을 도구 광고 목록에 주입 (handler는 run()에서 직접 처리)
+            if RECALL_OBSERVATION_TOOL_NAME not in self.tools.specs:
+                self.tools.specs[RECALL_OBSERVATION_TOOL_NAME] = recall_observation_spec()
         
         if self.config.enable_context_optimization and ACONHistoryOptimizer is not None:
             try:
@@ -191,6 +214,7 @@ class ReActAgent:
         system_content = build_system_prompt(
             self.tools.describe_for_prompt(),
             system_prompt=self.system_prompt,
+            enable_observation_memory=self.observation_memory is not None,
         )
         messages = [ModelMessage(role="system", content=system_content)]
         
@@ -198,8 +222,7 @@ class ReActAgent:
         task_content = build_task_prompt(task)
         if self.compressed_history:
             task_content += f"\n\n<HISTORY_SUMMARY>\n{self.compressed_history}\n</HISTORY_SUMMARY>"
-        messages.append(ModelMessage(role="user", content=task_content))
-        
+
         # 보존된 steps + 그 이후의 새로운 steps 추가
         if self.preserved_steps:
             # 보존된 steps 이후의 모든 새 steps 찾기
@@ -209,11 +232,30 @@ class ReActAgent:
         else:
             # 압축 전: 모든 steps 사용
             steps_to_add = state.steps
-        
+
+        # Observation Memory: preserved 윈도우 밖의 모든 step을 인덱스로 노출
+        if self.observation_memory is not None:
+            preserved_indices = {s.step_index for s in steps_to_add}
+            index_block = self.observation_memory.render_index(preserved_indices)
+            if index_block:
+                task_content += f"\n\n{index_block}"
+
+        messages.append(ModelMessage(role="user", content=task_content))
+
         for step in steps_to_add:
             messages.append(ModelMessage(role="assistant", content=step.raw_response))
+            obs_for_prompt = step.observation
+            if (
+                self.observation_memory is not None
+                and self.config.preserved_observation_max_chars > 0
+            ):
+                obs_for_prompt = cap_preserved_observation(
+                    step.observation,
+                    step.step_index,
+                    self.config.preserved_observation_max_chars,
+                )
             messages.append(
-                ModelMessage(role="user", content=build_observation_prompt(step.observation))
+                ModelMessage(role="user", content=build_observation_prompt(obs_for_prompt))
             )
         
         return messages
@@ -255,12 +297,49 @@ class ReActAgent:
                 ]
         return None, last_raw_response, last_error
 
+    def _execute_recall(
+        self, action_input: dict[str, Any], at_step: int
+    ) -> ToolExecutionResult:
+        assert self.observation_memory is not None
+        raw = action_input.get("step_index")
+        try:
+            step_index = int(raw)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            self.observation_memory.record_recall(at_step=at_step, recalled_step=-1, ok=False)
+            return ToolExecutionResult(
+                ok=False,
+                content={"error": f"recall_observation requires integer `step_index`, got {raw!r}"},
+            )
+        entry = self.observation_memory.recall(step_index)
+        if entry is None:
+            self.observation_memory.record_recall(at_step=at_step, recalled_step=step_index, ok=False)
+            return ToolExecutionResult(
+                ok=False,
+                content={"error": f"No observation stored for step {step_index}."},
+            )
+        self.observation_memory.record_recall(at_step=at_step, recalled_step=step_index, ok=True)
+        return ToolExecutionResult(
+            ok=True,
+            content={
+                "recalled_step_index": entry.step_index,
+                "tool": entry.tool,
+                "action_input": entry.action_input,
+                "observation": entry.observation,
+            },
+        )
+
+    def _memory_usage_payload(self) -> dict[str, Any] | None:
+        if self.observation_memory is None:
+            return None
+        return {"enabled": True, **self.observation_memory.to_dict()}
+
     def _build_partial_result(self, task: PublicTask, state: AgentRuntimeState) -> AgentRunResult:
         return AgentRunResult(
             task_id=task.task_id,
             answer=state.answer,
             steps=list(state.steps),
             failure_reason=state.failure_reason,
+            memory_usage=self._memory_usage_payload(),
         )
 
     def _flush_checkpoint(
@@ -292,10 +371,14 @@ class ReActAgent:
         self.preserved_steps = state.steps[-preserve_steps_count:]
         
         # Step 2: 보존할 steps 이전 것만 압축
+        if self.history_optimizer is None:
+            # ACON 미초기화: preserved_steps만 갱신하고 종료
+            # (메모리 단독 모드일 때 이 경로로 흐름)
+            return
         history_text = self._format_steps_for_compression(steps_for_compression)
         if not history_text.strip():
             return
-        
+
         # Step 3: 압축 필요 여부 확인
         needs_compression = self.history_optimizer.check_summarization_needed(
             history_text, self.compressed_history
@@ -349,8 +432,16 @@ class ReActAgent:
             step_text += f"  Action: {step.action}\n"
             step_text += f"  Action Input: {json.dumps(step.action_input, ensure_ascii=False)}\n"
             if step.observation:
-                obs_str = json.dumps(step.observation, ensure_ascii=False)
-                step_text += f"  Observation: {obs_str}\n"
+                if self.observation_memory is not None:
+                    # 메모리 ON: ACON 요약 입력에는 observation 본문 대신 메타만 노출
+                    ok_flag = step.observation.get("ok", True)
+                    tool_name = step.observation.get("tool", step.action)
+                    step_text += (
+                        f"  Observation: <stored in memory; tool={tool_name} ok={ok_flag}>\n"
+                    )
+                else:
+                    obs_str = json.dumps(step.observation, ensure_ascii=False)
+                    step_text += f"  Observation: {obs_str}\n"
             formatted.append(step_text)
         return "\n".join(formatted)
 
@@ -393,7 +484,13 @@ class ReActAgent:
                 plan_preview = plan_preview[:140] + "..."
 
             try:
-                tool_result = self.tools.execute(task, model_step.action, model_step.action_input)
+                if (
+                    self.observation_memory is not None
+                    and model_step.action == RECALL_OBSERVATION_TOOL_NAME
+                ):
+                    tool_result = self._execute_recall(model_step.action_input, step_index)
+                else:
+                    tool_result = self.tools.execute(task, model_step.action, model_step.action_input)
                 observation = {
                     "ok": tool_result.ok,
                     "tool": model_step.action,
@@ -421,7 +518,19 @@ class ReActAgent:
                     plan=model_step.plan,  # Plan-and-Solve: LLM으로부터 받은 계획 저장
                 )
                 state.steps.append(step_record)
-                
+
+                # Observation Memory: recall 호출은 저장하지 않음 (재귀 방지)
+                if (
+                    self.observation_memory is not None
+                    and model_step.action != RECALL_OBSERVATION_TOOL_NAME
+                ):
+                    self.observation_memory.store(
+                        step_index=step_index,
+                        tool=model_step.action,
+                        action_input=model_step.action_input,
+                        observation=observation,
+                    )
+
                 if tool_result.is_terminal:
                     if retry_empty_answer:
                         self._try_compress_history(task, state, step_index)
@@ -461,12 +570,7 @@ class ReActAgent:
         if state.answer is None and state.failure_reason is None:
             state.failure_reason = "Agent did not submit an answer within max_steps."
 
-        return AgentRunResult(
-            task_id=task.task_id,
-            answer=state.answer,
-            steps=list(state.steps),
-            failure_reason=state.failure_reason,
-        )
+        return self._build_partial_result(task, state)
 
     def _attempt_forced_answer(
         self,

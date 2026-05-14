@@ -89,10 +89,28 @@ Example: when the question asks which event has the lowest cost, return only the
 """.strip()
 
 
-def build_system_prompt(tool_descriptions: str, system_prompt: str | None = None) -> str:
+OBSERVATION_MEMORY_GUIDANCE = """
+OBSERVATION MEMORY:
+Observations from older steps have been removed from the message history to save tokens, but their originals are preserved in memory. A `<MEMORY_INDEX>` block in the task message lists each stored step in the form `[step=N] tool(action_input) ok=... len=... head="..."`. If you need the full original observation for any step listed there, call `recall_observation` with `step_index=N` (an integer) and the full content will be returned as the next observation. Use this before re-running a tool you already called — re-execution wastes steps and may give different results.
+
+Example: suppose `<MEMORY_INDEX>` shows `[step=3] read_doc({"path": "knowledge.md"}) ok=True len=4521 head="# Schema Guide..."` and you need to re-read the knowledge guide. Respond with:
+```json
+{"thought":"I need to revisit the knowledge.md content read in step 3 to confirm the column definitions.","plan":"","action":"recall_observation","action_input":{"step_index":3}}
+```
+The `action_input` MUST be `{"step_index": <integer>}`. Do not pass `{}` or omit `step_index` — that will fail.
+""".strip()
+
+
+def build_system_prompt(
+    tool_descriptions: str,
+    system_prompt: str | None = None,
+    *,
+    enable_observation_memory: bool = False,
+) -> str:
     base_prompt = system_prompt or REACT_PS_SYSTEM_PROMPT
+    memory_block = f"\n\n{OBSERVATION_MEMORY_GUIDANCE}" if enable_observation_memory else ""
     return (
-        f"{base_prompt}\n\n"
+        f"{base_prompt}{memory_block}\n\n"
         "Available tools:\n"
         f"{tool_descriptions}\n\n"
         f"{RESPONSE_EXAMPLES}\n\n"

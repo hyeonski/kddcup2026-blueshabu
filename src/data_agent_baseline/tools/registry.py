@@ -128,6 +128,21 @@ class ToolRegistry:
         return self.handlers[action](task, action_input)
 
 
+RECALL_OBSERVATION_TOOL_NAME = "recall_observation"
+
+
+def recall_observation_spec() -> ToolSpec:
+    return ToolSpec(
+        name=RECALL_OBSERVATION_TOOL_NAME,
+        description=(
+            "Retrieve the full original observation of a previously executed step from memory. "
+            "Use this when an older step is referenced in <MEMORY_INDEX> but its full content is no longer "
+            "in the conversation. Prefer recall over re-running a tool you already called."
+        ),
+        input_schema={"step_index": 3},
+    )
+
+
 def create_default_tool_registry() -> ToolRegistry:
     specs = {
         "answer": ToolSpec(
