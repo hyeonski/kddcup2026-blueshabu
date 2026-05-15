@@ -51,6 +51,9 @@ DATASET-COLUMN RULES:
 FILE DISCOVERY RULES:
 
 - After calling list_context, note every file in every subdirectory (csv/, json/, db/, etc.).
+- If the list_context observation ends mid-item (cut off mid-sentence or mid-entry), the listing is INCOMPLETE.
+  - Re-run list_context or confirm all files with: `execute_python` → `import os; print([os.path.join(r,f) for r,d,fs in os.walk('.') for f in fs if not f.endswith('Identifier')])`
+  - A hidden structured file (JSON/DB/CSV) may be missing from your view if you don't verify.
 - Before concluding that data for a time period or entity is unavailable, verify you have queried EVERY relevant file.
   - A file seen in the listing but never read is a mandatory next step — do not skip it.
 - If you find multiple files of the same type (e.g., two .db files in different folders), query ALL of them; they likely contain different data ranges or tables.
@@ -74,7 +77,9 @@ If your thought skips step 1 or 2, you are moving too fast.
 OBSERVATION SIGNAL RULES:
 
 - If an observation contains `"truncated": true`, the file was NOT fully read.
-  - Immediately re-call the same tool with a larger limit (double max_chars or max_rows).
+  - Check the file's size (bytes) from the list_context output. Set max_chars = size + 500 to read it in one shot.
+  - If size was not recorded, double max_chars on each retry: 8000 → 16000 → 32000 → 64000.
+  - Keep retrying until truncated=false. NEVER give up on knowledge.md — it contains critical thresholds.
   - Never re-read a truncated file with the same parameters — it will return the same partial content.
 - If a SQL or Python result returns 0 rows, do NOT conclude "no data exists" immediately:
   - Check whether the date/type format matches (e.g., integer 201306 vs string "2013-06").
@@ -89,7 +94,46 @@ ANTI-LOOP RULES:
   - Repeating the same call produces the same result and wastes a step.
 - After receiving an error or empty result, your next action MUST be meaningfully different from all previous actions.
 - Do not return to exploratory steps (list_context, read_doc) after a computation error. Fix the computation directly.
- 
+- STRATEGY-LEVEL LOOP: If the same approach type (e.g., "regex extraction from prose") has failed 3+ times with different variations, STOP. The approach itself is wrong — not just the parameters. Switch to a completely different strategy (e.g., different section delimiter, print raw samples to re-examine the format from scratch).
+
+UNSTRUCTURED DOCUMENT STRATEGY:
+When the context contains a large prose markdown file (no structured CSV/JSON/DB):
+
+1. CONFIRM NO STRUCTURED FILE EXISTS FIRST:
+   Run `os.walk('.')` to list all files. Only fall back to prose parsing after confirming
+   there is truly no CSV/JSON/DB alternative.
+
+2. USE execute_python + open() — NEVER read_doc FOR FILES > 20KB:
+   - read_doc has a character limit and will always truncate large prose files.
+   - `open('doc/file.md').read()` has no such limit and reads the full file into memory.
+   - Use read_doc only for quick < 5KB inspection; use open() for all programmatic processing.
+
+3. UNDERSTAND FORMAT BEFORE EXTRACTING:
+   In the first Python call, ALWAYS run this exact sequence:
+   a. `parts = content.split('\n\n'); print(len(parts))`
+      - If len(parts) > 10 → each paragraph is one entity. Use '\n\n' as your delimiter. Do NOT search for a fancier split.
+      - If len(parts) ≤ 10 → the file is structured differently; try a more specific delimiter.
+   b. Print 2–3 representative entity paragraphs (skip index 0, which is usually the title/header):
+        `[print(p[:300]) for p in parts[1:4]]`
+   c. Identify the EXACT phrases used (e.g., "height is recorded as X.0 centimeters",
+      "publisher 13"). Do NOT write any regex before seeing these raw samples.
+
+4. EXTRACT ALL IN ONE COMPREHENSIVE SCRIPT:
+   Once the format is confirmed (step 3), write ONE Python script that:
+   a. Reads the full file with open() — treat this as the last open() of this file.
+   b. Splits using the delimiter confirmed in step 3a (usually '\n\n').
+   c. For each entity section, tries MULTIPLE attribute patterns at once using alternation:
+        `re.search(r'pattern_A|pattern_B|pattern_C', section)`
+      Do NOT write separate scripts for pattern_A, pattern_B, pattern_C — try all in one pass.
+   d. Collects ALL (attr1, attr2, …) tuples and computes the final answer in the same script.
+   If the result is wrong or incomplete, add more pattern variants to THIS script in the next call.
+   Do NOT iterate: open file → try regex_A → open file again → try regex_B → open file again → …
+
+5. WHEN REGEX RETURNS 0 MATCHES:
+   - Print raw text of 2–3 sections where you expected a match.
+   - Confirm the delimiter actually splits the document correctly (check len(parts)).
+   - Add the observed new phrase variant to your pattern list, then re-run comprehensively.
+
 ERROR RECOVERY RULES:
 
 When you receive an error, read the message carefully before retrying.
@@ -116,7 +160,28 @@ PYTHON CODE RULES:
   - Target under 600 characters. If your code exceeds this, rewrite more compactly.
 - Always print() the final result — the tool returns stdout as `output`.
 - Check column dtypes before filtering: use `print(df.dtypes)` first if unsure.
- 
+
+PRE-ANSWER VERIFICATION (mandatory — run this checklist in thought before every `answer` call):
+
+Re-read the original question word-by-word and verify each point before submitting:
+
+1. CONTENT vs IDENTIFIER: Does the question ask for the *thing itself* or just a *label*?
+   - "what is the comment / name / text / description" → return the TEXT column, NOT the Id/key column.
+   - "which event / driver / patient" → return the NAME/identifying column, not a surrogate key.
+2. AGGREGATION LEVEL: Does the question imply uniqueness or counting?
+   - "tally / list the elements / how many distinct" → apply DISTINCT or GROUP BY before submitting.
+   - Do NOT return one row per raw record when the question expects a rolled-up result.
+3. QUALIFIER TRANSLATION: Are there unit or scope qualifiers?
+   - "per unit / per item" → condition must be Price/Amount > N, NOT Price > N alone.
+   - "not yet X years old" → age < X strictly (not ≤).
+   - "more than N posts" → COUNT > N (not ≥ N).
+4. COLUMN ORDER: Match the order terms appear in the question.
+   - "average upvotes AND average age" → UpVotes column first, Age second.
+5. ROW COMPLETENESS: Are ALL matching rows returned?
+   - If multiple rows satisfy the condition equally, return ALL of them — not just the closest or first.
+6. EXTRA COLUMNS: Strip any column the question did NOT ask for.
+   - Do not include CustomerID, molecule_id, etc. when the question only asks for Consumption or element.
+
 FORMAT RULES:
 
 1. Always return exactly one JSON object with keys `thought`, `action`, and `action_input`.
@@ -136,10 +201,20 @@ Example — initial planning step:
 ```json
 {"thought":"I need to gather data about the task. Let me start by exploring the context.","plan":"1. List all files\n2. Read knowledge.md fully (increase max_chars if truncated)\n3. Inspect every relevant file found\n4. Compute and verify answer","action":"list_context","action_input":{"max_depth":4}}
 ```
- 
-Example — knowledge.md was truncated, re-reading with larger max_chars:
+
+Example — list_context observation cut off mid-item, confirming all files before proceeding:
 ```json
-{"thought":"The previous read_doc returned truncated=true. I must re-read with a larger max_chars to get the full schema information.","action":"read_doc","action_input":{"path":"knowledge.md","max_chars":16000}}
+{"thought":"OBSERVED: list_context ended mid-item at {'path': 'json', 'kind'... — the file listing is INCOMPLETE. UNACTIONED: unknown files may still exist. NEXT: confirm all files with os.walk before touching any data.","action":"execute_python","action_input":{"code":"import os\nprint([os.path.join(r,f) for r,d,fs in os.walk('.') for f in fs if not f.endswith('Identifier')])"}}
+```
+
+Example — knowledge.md was truncated: check file size first, then set max_chars accordingly:
+```json
+{"thought":"OBSERVED: read_doc returned truncated=true for knowledge.md at max_chars=8000. list_context showed knowledge.md is 5459 bytes. UNACTIONED: full content not yet read. NEXT: set max_chars=6000 (size+500) to read it in one shot.","action":"read_doc","action_input":{"path":"knowledge.md","max_chars":6000}}
+```
+
+Example — knowledge.md still truncated after first retry, escalating further:
+```json
+{"thought":"OBSERVED: read_doc returned truncated=true again at max_chars=16000. UNACTIONED: full content not yet read — I cannot proceed without the domain thresholds inside. NEXT: double to 32000 and retry. I will keep doubling until truncated=false.","action":"read_doc","action_input":{"path":"knowledge.md","max_chars":32000}}
 ```
  
 Example — empty result from one file, trying another file before giving up:
@@ -175,6 +250,26 @@ Example — aggregate column naming:
 Example — question asks WHICH event has lowest cost (return only identifier, not the cost):
 ```json
 {"thought":"The question asks for the event with the lowest cost, so I output only event_name, not the cost value.","action":"answer","action_input":{"columns":["event_name"],"rows":[["September Speaker"]]}}
+```
+
+Example — PRE-ANSWER VERIFICATION catches wrong column before submission:
+```json
+{"thought":"PRE-ANSWER VERIFICATION: Question says 'what is the comment with the highest score'. (1) CONTENT vs IDENTIFIER: 'what is the comment' asks for the comment CONTENT, not its Id — I must return the Text column, not Id. (2) AGGREGATION: one highest-score row is correct. (3) QUALIFIERS: none. (4) ORDER: single column. (5) COMPLETENESS: one row. (6) EXTRA COLUMNS: none. Result: I had computed Id=90813 but must instead return the Text value for that row.","action":"execute_python","action_input":{"code":"import csv,sqlite3\ncon=sqlite3.connect('db/posts.db')\nids=set(r[0] for r in con.execute('SELECT Id FROM posts WHERE ViewCount BETWEEN 100 AND 150'))\ncon.close()\nbest=None;bscore=-1\nwith open('csv/comments.csv') as f:\n  for r in csv.DictReader(f):\n    if int(r['PostId']) in ids and int(r['Score'])>bscore:\n      bscore=int(r['Score']);best=r['Text']\nprint(best)"}}
+```
+
+Example — PRE-ANSWER VERIFICATION catches missing DISTINCT before submission:
+```json
+{"thought":"PRE-ANSWER VERIFICATION: Question says 'tally the toxicology element of the 4th atom'. (1) CONTENT vs IDENTIFIER: element is already a text value. (2) AGGREGATION: 'tally' means enumerate DISTINCT elements — I returned 84 molecule-element pairs but the question wants distinct elements only. I must apply DISTINCT. Fixing now.","action":"execute_python","action_input":{"code":"carcinogens=set(open('carcinogens.txt').read().split())\nelems=set()\nfor line in open('molecule_4th_atom.txt'):\n  parts=line.strip().split('\\t')\n  if len(parts)==2 and parts[0] in carcinogens: elems.add(parts[1])\nprint(sorted(elems))"}}
+```
+
+Example — large prose file (>20KB): skip read_doc, confirm files then understand format first:
+```json
+{"thought":"OBSERVED: doc/superhero.md is 177990 bytes — too large for read_doc. os.walk confirmed no structured CSV/JSON/DB exists. UNACTIONED: format not yet understood. NEXT: print 3 raw sections to learn the exact delimiter and attribute phrases before writing any regex.","action":"execute_python","action_input":{"code":"with open('doc/superhero.md') as f: c=f.read()\nparts=[p for p in c.split('\\n\\n') if len(p)>50]\nprint(f'Sections: {len(parts)}')\nfor p in parts[:3]: print('---'); print(p[:300])"}}
+```
+
+Example — after understanding prose format, extract ALL attributes in one comprehensive script:
+```json
+{"thought":"OBSERVED: sections split by 'An entry has been recorded for'; height uses variants 'height is X cm' / 'height is recorded as X.0 centimeters'; publisher uses 'publisher N'. NEXT: extract all (height, publisher_id) pairs in one script using all variants simultaneously.","action":"execute_python","action_input":{"code":"import re,json\nwith open('doc/superhero.md') as f: c=f.read()\nwith open('json/publisher.json') as f: pub={r['id']:r['publisher_name'] for r in json.load(f)['records']}\nHPAT=re.compile(r'height(?:[^\\d]{0,30})(\\d{2,3}(?:\\.\\d)?)\\s*(?:cm|centimeter)',re.I)\nPPAT=re.compile(r'publisher\\s+(\\d+)',re.I)\nparts=c.split('An entry has been recorded for')\ntotal=marvel=0\nfor p in parts:\n  h=HPAT.search(p);pb=PPAT.search(p)\n  if h and pb:\n    ht=float(h.group(1));pid=int(pb.group(1))\n    if 150<=ht<=180: total+=1;marvel+=(pub.get(pid)=='Marvel Comics')\nprint(total,marvel,round(100*marvel/total,2) if total else 'N/A')"}}
 ```
 
 Example — observation-first thought (pkl file with unknown values):
@@ -228,12 +323,23 @@ def build_task_prompt(task: PublicTask) -> str:
     return (
         f"Question: {task.question}\n"
         "--- Execution checklist ---\n"
-        "1. Call list_context first. Note every file path — you must read all of them.\n"
-        "2. If knowledge.md or any doc returns truncated=true, re-read it with larger max_chars.\n"
+        "1. Call list_context first. Note every file path AND each file's size in bytes.\n"
+        "   - If the observation ends mid-item, confirm all files with os.walk via execute_python.\n"
+        "2. Read knowledge.md FULLY before touching any data file.\n"
+        "   - From list_context, note the knowledge.md size. Set max_chars = size + 500.\n"
+        "   - If still truncated, double max_chars and retry (8000→16000→32000→64000).\n"
+        "   - NEVER skip or partially read knowledge.md — it defines thresholds and schema.\n"
         "3. If a query returns 0 rows, verify the data format and check all relevant files before concluding empty.\n"
         "4. Never repeat an identical (tool, parameters) call — change something.\n"
         "5. Keep execute_python code under 600 characters. Use short variable names.\n"
-        "6. When ready, call the `answer` tool with exact dataset column names.\n"
+        "6. BEFORE calling answer, run the PRE-ANSWER VERIFICATION checklist:\n"
+        "   a. Re-read the question. Does 'what is the X' mean the TEXT of X, or just its Id?\n"
+        "   b. Does the question say 'tally / distinct / unique'? → apply DISTINCT or GROUP BY.\n"
+        "   c. Does the question say 'per unit'? → divide price by quantity, not use price alone.\n"
+        "   d. Do column names and their ORDER match the question's phrasing?\n"
+        "   e. Are ALL matching rows included — not just the first/closest one?\n"
+        "   f. Remove any columns the question did NOT ask for.\n"
+        "7. Call the `answer` tool only after the above checklist passes.\n"
         "---\n"
         "All tool file paths are relative to the task context directory. "
         "Prefer dataset column names in your final table. "
