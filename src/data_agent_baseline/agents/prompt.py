@@ -86,6 +86,12 @@ OBSERVATION SIGNAL RULES:
   - Check whether you queried the right file (there may be another file with the relevant data).
   - Try at least one alternative query or file before concluding empty.
 - If a query result has row_count > 0 but `"truncated": true`, increase the `limit` parameter.
+- JOIN COMPLETENESS CHECK: When joining two extracted data sources on a common key
+  (e.g., entity ID, patient ID), always verify the overlap count before computing a result:
+    print(f"A: {len(A)}, B: {len(B)}, Joined: {len(set(A) & set(B))}")
+  If the joined count is much smaller than either source (e.g., A=64, B=58, Joined=3),
+  the extraction is INCOMPLETE — do NOT compute a final answer yet.
+  Instead, print sample unmatched keys from both sides to diagnose why IDs don't align.
  
 ANTI-LOOP RULES:
 
