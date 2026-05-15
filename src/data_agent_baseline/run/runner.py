@@ -63,6 +63,8 @@ def build_param_suffix(config: AppConfig) -> str:
     if config.agent.enable_context_optimization:
         parts.append(f"H{config.agent.history_summarization_threshold}")
         parts.append(f"K{config.agent.preserve_last_k_steps}")
+    if config.agent.enable_observation_memory:
+        parts.append("MEM")
     return "-".join(parts)
 
 
@@ -114,6 +116,9 @@ def agent_config_snapshot(config: AppConfig) -> dict[str, Any]:
         "enable_context_optimization": config.agent.enable_context_optimization,
         "history_summarization_threshold": config.agent.history_summarization_threshold,
         "preserve_last_k_steps": config.agent.preserve_last_k_steps,
+        "enable_observation_memory": config.agent.enable_observation_memory,
+        "memory_index_head_chars": config.agent.memory_index_head_chars,
+        "preserved_observation_max_chars": config.agent.preserved_observation_max_chars,
         "task_timeout_seconds": config.run.task_timeout_seconds,
     }
 
@@ -165,6 +170,9 @@ def _build_react_config(config: AppConfig) -> ReActAgentConfig:
         enable_context_optimization=config.agent.enable_context_optimization,
         history_summarization_threshold=config.agent.history_summarization_threshold,
         preserve_last_k_steps=config.agent.preserve_last_k_steps,
+        enable_observation_memory=config.agent.enable_observation_memory,
+        memory_index_head_chars=config.agent.memory_index_head_chars,
+        preserved_observation_max_chars=config.agent.preserved_observation_max_chars,
     )
 
 
