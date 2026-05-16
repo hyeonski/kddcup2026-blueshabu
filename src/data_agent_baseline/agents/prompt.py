@@ -114,31 +114,49 @@ When the context contains a large prose markdown file (no structured CSV/JSON/DB
    - `open('doc/file.md').read()` has no such limit and reads the full file into memory.
    - Use read_doc only for quick < 5KB inspection; use open() for all programmatic processing.
 
-3. UNDERSTAND FORMAT BEFORE EXTRACTING:
-   In the first Python call, ALWAYS run this exact sequence:
-   a. `parts = content.split('\n\n'); print(len(parts))`
-      - If len(parts) > 10 → each paragraph is one entity. Use '\n\n' as your delimiter. Do NOT search for a fancier split.
-      - If len(parts) ≤ 10 → the file is structured differently; try a more specific delimiter.
-   b. Print 2–3 representative entity paragraphs (skip index 0, which is usually the title/header):
-        `[print(p[:300]) for p in parts[1:4]]`
-   c. Identify the EXACT phrases used (e.g., "height is recorded as X.0 centimeters",
-      "publisher 13"). Do NOT write any regex before seeing these raw samples.
+3. MAP DOCUMENT STRUCTURE BEFORE EXTRACTING:
+   Your FIRST execute_python call MUST do all three steps below.
+   Do NOT write any extraction or regex code before completing this step.    
+   a. Split and measure:
+      content = open('doc/file.md').read()
+      parts = content.split('\n\n'); n = len(parts)
+      print(f'sections={n} chars={len(content)}')
 
-4. EXTRACT ALL IN ONE COMPREHENSIVE SCRIPT:
-   Once the format is confirmed (step 3), write ONE Python script that:
-   a. Reads the full file with open() — treat this as the last open() of this file.
-   b. Splits using the delimiter confirmed in step 3a (usually '\n\n').
-   c. For each entity section, tries MULTIPLE attribute patterns at once using alternation:
-        `re.search(r'pattern_A|pattern_B|pattern_C', section)`
-      Do NOT write separate scripts for pattern_A, pattern_B, pattern_C — try all in one pass.
-   d. Collects ALL (attr1, attr2, …) tuples and computes the final answer in the same script.
-   If the result is wrong or incomplete, add more pattern variants to THIS script in the next call.
-   Do NOT iterate: open file → try regex_A → open file again → try regex_B → open file again → …
+   b. Sample five distributed positions — not just the beginning:
+      for i in [0, n//4, n//2, 3*n//4, n-1]:
+          print(f'\n==[{i}]==\n{parts[i][:200]}')
 
-5. WHEN REGEX RETURNS 0 MATCHES:
-   - Print raw text of 2–3 sections where you expected a match.
-   - Confirm the delimiter actually splits the document correctly (check len(parts)).
-   - Add the observed new phrase variant to your pattern list, then re-run comprehensively.
+   c. Find each needed attribute's section range:
+      for attr in ['keyword1', 'keyword2']:
+          hits = [i for i,p in enumerate(parts) if attr in p.lower()]
+          if hits: print(f'{attr}: {hits[0]}..{hits[-1]} ({len(hits)} hits)')
+   Do NOT write any regex before completing this step.
+
+4. CHOOSE EXTRACTION STRATEGY:
+   - SAME-ZONE: all attributes in the same section range → single-pass extraction (rule 5).
+   - MULTI-ZONE: attributes in different section ranges → extract each zone into a dict
+     keyed by entity ID, then join by ID (rule 6).
+
+5. SAME-ZONE EXTRACTION:
+   ONE script: read, split, extract all needed attributes per section using alternation
+   patterns, collect results, and compute the answer in the same script:
+     re.search(r'pattern_A|pattern_B|pattern_C', section)
+
+6. MULTI-ZONE EXTRACTION:
+   a. For each zone, extract (entity_id → value) into a dict:
+        zone = parts[start:end]; d = {}
+        for p in zone:
+            id_m = re.search(r'ID\\s+(\\d+)', p)
+            v_m = re.search(r'pattern_A|pattern_B', p, re.I)
+            if id_m and v_m: d[id_m.group(1)] = v_m.group(1)
+   b. JOIN and verify completeness before computing:
+        print(f'A={len(da)} B={len(db)} Joined={len({k for k in da if k in db})}')
+      If Joined=0: print the first 5 keys of each dict to compare formats.
+      If Joined << min(A,B): check whether some sections use a different ID phrase.
+
+7. WHEN REGEX RETURNS TOO FEW MATCHES:
+   Sample a few sections from the relevant zone, identify the exact phrase variant,
+   add it to the alternation pattern, and re-run. Do NOT restart with a new script.
 
 ERROR RECOVERY RULES:
 
@@ -168,25 +186,8 @@ PYTHON CODE RULES:
 - Check column dtypes before filtering: use `print(df.dtypes)` first if unsure.
 
 PRE-ANSWER VERIFICATION (mandatory — run this checklist in thought before every `answer` call):
-
-Re-read the original question word-by-word and verify each point before submitting:
-
-1. CONTENT vs IDENTIFIER: Does the question ask for the *thing itself* or just a *label*?
-   - "what is the comment / name / text / description" → return the TEXT column, NOT the Id/key column.
-   - "which event / driver / patient" → return the NAME/identifying column, not a surrogate key.
-2. AGGREGATION LEVEL: Does the question imply uniqueness or counting?
-   - "tally / list the elements / how many distinct" → apply DISTINCT or GROUP BY before submitting.
-   - Do NOT return one row per raw record when the question expects a rolled-up result.
-3. QUALIFIER TRANSLATION: Are there unit or scope qualifiers?
-   - "per unit / per item" → condition must be Price/Amount > N, NOT Price > N alone.
-   - "not yet X years old" → age < X strictly (not ≤).
-   - "more than N posts" → COUNT > N (not ≥ N).
-4. COLUMN ORDER: Match the order terms appear in the question.
-   - "average upvotes AND average age" → UpVotes column first, Age second.
-5. ROW COMPLETENESS: Are ALL matching rows returned?
-   - If multiple rows satisfy the condition equally, return ALL of them — not just the closest or first.
-6. EXTRA COLUMNS: Strip any column the question did NOT ask for.
-   - Do not include CustomerID, molecule_id, etc. when the question only asks for Consumption or element.
+- Re-read the original question word-by-word and verify each point before submitting:
+   - Before calling answer, re-read the question to verify: content vs. surrogate ID, aggregation/distinct level, qualifier scope, column order, row completeness, and no extra columns.
 
 FORMAT RULES:
 
@@ -205,92 +206,27 @@ Keep reasoning structured: first understand, then plan, then execute.
 RESPONSE_EXAMPLES = """
 Example — initial planning step:
 ```json
-{"thought":"I need to gather data about the task. Let me start by exploring the context.","plan":"1. List all files\n2. Read knowledge.md fully (increase max_chars if truncated)\n3. Inspect every relevant file found\n4. Compute and verify answer","action":"list_context","action_input":{"max_depth":4}}
+{"thought":"I need to gather data about the task. Let me start by exploring the context.","plan":"1. List all files\n2. Read knowledge.md fully\n3. Inspect relevant files\n4. Compute and verify answer","action":"list_context","action_input":{"max_depth":4}}
 ```
 
-Example — list_context observation cut off mid-item, confirming all files before proceeding:
-```json
-{"thought":"OBSERVED: list_context ended mid-item at {'path': 'json', 'kind'... — the file listing is INCOMPLETE. UNACTIONED: unknown files may still exist. NEXT: confirm all files with os.walk before touching any data.","action":"execute_python","action_input":{"code":"import os\nprint([os.path.join(r,f) for r,d,fs in os.walk('.') for f in fs if not f.endswith('Identifier')])"}}
-```
-
-Example — knowledge.md was truncated: check file size first, then set max_chars accordingly:
-```json
-{"thought":"OBSERVED: read_doc returned truncated=true for knowledge.md at max_chars=8000. list_context showed knowledge.md is 5459 bytes. UNACTIONED: full content not yet read. NEXT: set max_chars=6000 (size+500) to read it in one shot.","action":"read_doc","action_input":{"path":"knowledge.md","max_chars":6000}}
-```
-
-Example — knowledge.md still truncated after first retry, escalating further:
-```json
-{"thought":"OBSERVED: read_doc returned truncated=true again at max_chars=16000. UNACTIONED: full content not yet read — I cannot proceed without the domain thresholds inside. NEXT: double to 32000 and retry. I will keep doubling until truncated=false.","action":"read_doc","action_input":{"path":"knowledge.md","max_chars":32000}}
-```
- 
-Example — empty result from one file, trying another file before giving up:
-```json
-{"thought":"transactions_1k.db returned 0 rows for June 2013. I noticed json/transactions_1k.db also exists and has not been queried yet. I must check it before concluding no data exists.","action":"inspect_sqlite_schema","action_input":{"path":"json/transactions_1k.db"}}
-```
- 
-Example — fixing a JSON truncation error by compressing code:
-```json
-{"thought":"The previous response caused a 'multiple JSON objects' error because my code was too long. I will rewrite the same logic more compactly using short variable names and one-liners.","action":"execute_python","action_input":{"code":"import json,csv\nwith open('json/event.json') as f: ev=json.load(f)['records']\nwith open('json/expense.json') as f: ex=json.load(f)['records']\nwith open('csv/budget.csv') as f: bd=list(csv.DictReader(f))\nb2e={b['budget_id']:b['link_to_event'] for b in bd}\ncosts={}\nfor e in ex:\n  eid=b2e.get(e.get('link_to_budget'))\n  if eid: costs[eid]=costs.get(eid,0)+float(e['cost'])\nprint(costs)"}}
-```
- 
-Example — fixing wrong action_input format:
-```json
-{"thought":"Previous step failed with 'action_input must be a JSON object' because I passed a plain string. I must wrap the code in a dict with key 'code'.","action":"execute_python","action_input":{"code":"import os\nprint(sorted(os.listdir('.')))"}}
-```
- 
 Example — final answer with exact dataset column names:
 ```json
 {"thought":"I have computed all necessary data and verified the column names against the dataset.","action":"answer","action_input":{"columns":["average_long_shots"],"rows":[["63.5"]]}}
 ```
- 
+
 Example — question asks for full names but dataset has first_name/last_name:
 ```json
 {"thought":"The context has columns first_name and last_name; I'll return those instead of inventing full_name.","action":"answer","action_input":{"columns":["first_name","last_name"],"rows":[["Trent","Smith"],["Tyler","Hewitt"]]}}
 ```
- 
+
 Example — aggregate column naming:
 ```json
 {"thought":"I will compute the total cost per member using the cost column in T2.","action":"answer","action_input":{"columns":["first_name","last_name","SUM(T2.cost)"],"rows":[["Sacha","Harrison","866.25"]]}}
 ```
- 
+
 Example — question asks WHICH event has lowest cost (return only identifier, not the cost):
 ```json
 {"thought":"The question asks for the event with the lowest cost, so I output only event_name, not the cost value.","action":"answer","action_input":{"columns":["event_name"],"rows":[["September Speaker"]]}}
-```
-
-Example — PRE-ANSWER VERIFICATION catches wrong column before submission:
-```json
-{"thought":"PRE-ANSWER VERIFICATION: Question says 'what is the comment with the highest score'. (1) CONTENT vs IDENTIFIER: 'what is the comment' asks for the comment CONTENT, not its Id — I must return the Text column, not Id. (2) AGGREGATION: one highest-score row is correct. (3) QUALIFIERS: none. (4) ORDER: single column. (5) COMPLETENESS: one row. (6) EXTRA COLUMNS: none. Result: I had computed Id=90813 but must instead return the Text value for that row.","action":"execute_python","action_input":{"code":"import csv,sqlite3\ncon=sqlite3.connect('db/posts.db')\nids=set(r[0] for r in con.execute('SELECT Id FROM posts WHERE ViewCount BETWEEN 100 AND 150'))\ncon.close()\nbest=None;bscore=-1\nwith open('csv/comments.csv') as f:\n  for r in csv.DictReader(f):\n    if int(r['PostId']) in ids and int(r['Score'])>bscore:\n      bscore=int(r['Score']);best=r['Text']\nprint(best)"}}
-```
-
-Example — PRE-ANSWER VERIFICATION catches missing DISTINCT before submission:
-```json
-{"thought":"PRE-ANSWER VERIFICATION: Question says 'tally the toxicology element of the 4th atom'. (1) CONTENT vs IDENTIFIER: element is already a text value. (2) AGGREGATION: 'tally' means enumerate DISTINCT elements — I returned 84 molecule-element pairs but the question wants distinct elements only. I must apply DISTINCT. Fixing now.","action":"execute_python","action_input":{"code":"carcinogens=set(open('carcinogens.txt').read().split())\nelems=set()\nfor line in open('molecule_4th_atom.txt'):\n  parts=line.strip().split('\\t')\n  if len(parts)==2 and parts[0] in carcinogens: elems.add(parts[1])\nprint(sorted(elems))"}}
-```
-
-Example — large prose file (>20KB): skip read_doc, confirm files then understand format first:
-```json
-{"thought":"OBSERVED: doc/superhero.md is 177990 bytes — too large for read_doc. os.walk confirmed no structured CSV/JSON/DB exists. UNACTIONED: format not yet understood. NEXT: print 3 raw sections to learn the exact delimiter and attribute phrases before writing any regex.","action":"execute_python","action_input":{"code":"with open('doc/superhero.md') as f: c=f.read()\nparts=[p for p in c.split('\\n\\n') if len(p)>50]\nprint(f'Sections: {len(parts)}')\nfor p in parts[:3]: print('---'); print(p[:300])"}}
-```
-
-Example — after understanding prose format, extract ALL attributes in one comprehensive script:
-```json
-{"thought":"OBSERVED: sections split by 'An entry has been recorded for'; height uses variants 'height is X cm' / 'height is recorded as X.0 centimeters'; publisher uses 'publisher N'. NEXT: extract all (height, publisher_id) pairs in one script using all variants simultaneously.","action":"execute_python","action_input":{"code":"import re,json\nwith open('doc/superhero.md') as f: c=f.read()\nwith open('json/publisher.json') as f: pub={r['id']:r['publisher_name'] for r in json.load(f)['records']}\nHPAT=re.compile(r'height(?:[^\\d]{0,30})(\\d{2,3}(?:\\.\\d)?)\\s*(?:cm|centimeter)',re.I)\nPPAT=re.compile(r'publisher\\s+(\\d+)',re.I)\nparts=c.split('An entry has been recorded for')\ntotal=marvel=0\nfor p in parts:\n  h=HPAT.search(p);pb=PPAT.search(p)\n  if h and pb:\n    ht=float(h.group(1));pid=int(pb.group(1))\n    if 150<=ht<=180: total+=1;marvel+=(pub.get(pid)=='Marvel Comics')\nprint(total,marvel,round(100*marvel/total,2) if total else 'N/A')"}}
-```
-
-Example — observation-first thought (pkl file with unknown values):
-```json
-{"thought":"OBSERVED: patients.pkl is a dict with 97 patient ID keys. Values are <class 'datetime.datetime'>. I have NOT yet printed an actual value to confirm what the dates represent. UNACTIONED: actual datetime values not yet seen. NEXT: print list(data.items())[:3] to verify.","action":"execute_python","action_input":{"code":"import pickle\nwith open('patients.pkl','rb') as f: d=pickle.load(f)\nprint(list(d.items())[:3])"}}
-```
-
-Example — observation-first thought (file listing with unqueried file):
-```json
-{"thought":"OBSERVED: list_context returned 4 files: csv/yearmonth.csv, db/transactions_1k.db, json/gasstations.json, json/transactions_1k.db. UNACTIONED: json/transactions_1k.db has not been queried — only db/transactions_1k.db was inspected. NEXT: inspect json/transactions_1k.db schema before concluding no June 2013 data exists.","action":"inspect_sqlite_schema","action_input":{"path":"json/transactions_1k.db"}}
-```
-
-Example — observation-first thought (0 rows returned):
-```json
-{"thought":"OBSERVED: query returned 0 rows for Date >= '2013-06-01'. UNACTIONED: I checked db/transactions_1k.db but not json/transactions_1k.db. Also, date format may differ. NEXT: check date format first with SELECT DISTINCT Date FROM transactions_1k LIMIT 5.","action":"execute_context_sql","action_input":{"path":"db/transactions_1k.db","sql":"SELECT DISTINCT Date FROM transactions_1k LIMIT 5"}}
 ```
 """.strip()
 
@@ -328,29 +264,10 @@ def build_system_prompt(
 def build_task_prompt(task: PublicTask) -> str:
     return (
         f"Question: {task.question}\n"
-        "--- Execution checklist ---\n"
-        "1. Call list_context first. Note every file path AND each file's size in bytes.\n"
-        "   - If the observation ends mid-item, confirm all files with os.walk via execute_python.\n"
-        "2. Read knowledge.md FULLY before touching any data file.\n"
-        "   - From list_context, note the knowledge.md size. Set max_chars = size + 500.\n"
-        "   - If still truncated, double max_chars and retry (8000→16000→32000→64000).\n"
-        "   - NEVER skip or partially read knowledge.md — it defines thresholds and schema.\n"
-        "3. If a query returns 0 rows, verify the data format and check all relevant files before concluding empty.\n"
-        "4. Never repeat an identical (tool, parameters) call — change something.\n"
-        "5. Keep execute_python code under 600 characters. Use short variable names.\n"
-        "6. BEFORE calling answer, run the PRE-ANSWER VERIFICATION checklist:\n"
-        "   a. Re-read the question. Does 'what is the X' mean the TEXT of X, or just its Id?\n"
-        "   b. Does the question say 'tally / distinct / unique'? → apply DISTINCT or GROUP BY.\n"
-        "   c. Does the question say 'per unit'? → divide price by quantity, not use price alone.\n"
-        "   d. Do column names and their ORDER match the question's phrasing?\n"
-        "   e. Are ALL matching rows included — not just the first/closest one?\n"
-        "   f. Remove any columns the question did NOT ask for.\n"
-        "7. Call the `answer` tool only after the above checklist passes.\n"
-        "---\n"
         "All tool file paths are relative to the task context directory. "
-        "Prefer dataset column names in your final table. "
-        "Use only the columns the question actually requires. "
-        "Name aggregates using SQL-like expressions (e.g., SUM(T2.cost))."
+        "Prefer dataset column names; name aggregates using SQL-like expressions (e.g., SUM(T2.cost)). "
+        "Before calling `answer`, re-read the question to verify: content vs. surrogate ID, "
+        "aggregation/distinct level, qualifier scope, column order, row completeness, and no extra columns. "
         "When you have the final table, call the `answer` tool."
     )
 
