@@ -109,54 +109,43 @@ When the context contains a large prose markdown file (no structured CSV/JSON/DB
    Run `os.walk('.')` to list all files. Only fall back to prose parsing after confirming
    there is truly no CSV/JSON/DB alternative.
 
-2. USE execute_python + open() — NEVER read_doc FOR FILES > 20KB:
-   - read_doc has a character limit and will always truncate large prose files.
-   - `open('doc/file.md').read()` has no such limit and reads the full file into memory.
-   - Use read_doc only for quick < 5KB inspection; use open() for all programmatic processing.
+2. SAMPLE BEFORE ANYTHING ELSE — MANDATORY:
+    Your first execute_python call MUST do all three of the following.
+    Do NOT write any extraction or regex code before this step is complete.
 
-3. MAP DOCUMENT STRUCTURE BEFORE EXTRACTING:
-   Your FIRST execute_python call MUST do all three steps below.
-   Do NOT write any extraction or regex code before completing this step.    
-   a. Split and measure:
-      content = open('doc/file.md').read()
-      parts = content.split('\n\n'); n = len(parts)
-      print(f'sections={n} chars={len(content)}')
+    a. Measure the file:
+      content = open('path/to/file').read()
+      print(f'chars={len(content)}, lines={content.count(chr(10))}')
+      
+    b. Print 5 distributed excerpts (not just the beginning):
+      n = len(content)
+      for pct in [0, 25, 50, 75, 99]:
+          i = n * pct // 100
+          print(f'\n==[{pct}%]==\n{repr(content[i:i+300])}')
+          
+    c. From what you observe, explicitly state in `thought`:
+      "The structural delimiter is X" (e.g. '\n\n', '\n', '### ', '---', numbered lines).
+      If you cannot identify a clear delimiter, state that and proceed to chunked search.
 
-   b. Sample five distributed positions — not just the beginning:
-      for i in [0, n//4, n//2, 3*n//4, n-1]:
-          print(f'\n==[{i}]==\n{parts[i][:200]}')
+3. CHOOSE EXTRACTION STRATEGY based on step 2 findings:
+   - Clear delimiter found → split on that delimiter, then extract per-section.
+   - No clear delimiter / very large file → use targeted search:
+      re.search / str.find to locate relevant sections without splitting the whole file.
+   - NEVER print raw file content to stdout. Compute in Python, print only the final result.
 
-   c. Find each needed attribute's section range:
-      for attr in ['keyword1', 'keyword2']:
-          hits = [i for i,p in enumerate(parts) if attr in p.lower()]
-          if hits: print(f'{attr}: {hits[0]}..{hits[-1]} ({len(hits)} hits)')
-   Do NOT write any regex before completing this step.
-
-4. CHOOSE EXTRACTION STRATEGY:
-   - SAME-ZONE: all attributes in the same section range → single-pass extraction (rule 5).
-   - MULTI-ZONE: attributes in different section ranges → extract each zone into a dict
-     keyed by entity ID, then join by ID (rule 6).
-
-5. SAME-ZONE EXTRACTION:
-   ONE script: read, split, extract all needed attributes per section using alternation
-   patterns, collect results, and compute the answer in the same script:
-     re.search(r'pattern_A|pattern_B|pattern_C', section)
-
-6. MULTI-ZONE EXTRACTION:
-   a. For each zone, extract (entity_id → value) into a dict:
-        zone = parts[start:end]; d = {}
-        for p in zone:
-            id_m = re.search(r'ID\\s+(\\d+)', p)
-            v_m = re.search(r'pattern_A|pattern_B', p, re.I)
-            if id_m and v_m: d[id_m.group(1)] = v_m.group(1)
-   b. JOIN and verify completeness before computing:
-        print(f'A={len(da)} B={len(db)} Joined={len({k for k in da if k in db})}')
-      If Joined=0: print the first 5 keys of each dict to compare formats.
-      If Joined << min(A,B): check whether some sections use a different ID phrase.
-
-7. WHEN REGEX RETURNS TOO FEW MATCHES:
-   Sample a few sections from the relevant zone, identify the exact phrase variant,
-   add it to the alternation pattern, and re-run. Do NOT restart with a new script.
+4. EXTRACT AND VERIFY:
+     - Before writing any extraction code, confirm in `thought`:
+       "I have seen a raw sample section that visibly contains the target data."
+       If you have not seen it yet, expand sampling first — do not write regex blindly.
+     - Write one script: read → split on YOUR identified delimiter → extract → print result only.
+     - NEVER dump raw lists or intermediate data to stdout.
+       Use [:5] slices or len() for debugging; print only the final answer value(s).
+     - If extraction returns 0 or too few matches:
+       Print repr() of 3-5 sections from the target zone to inspect exact whitespace/characters.
+       The most common cause of 0 matches is a WRONG DELIMITER, not a wrong pattern.
+       Fix the delimiter first before changing the regex.
+     - If you still have not seen the target data in any raw sample: stop trying regex variations.
+       Re-run step 2 with broader or different sampling positions.
 
 ERROR RECOVERY RULES:
 
@@ -186,8 +175,24 @@ PYTHON CODE RULES:
 - Check column dtypes before filtering: use `print(df.dtypes)` first if unsure.
 
 PRE-ANSWER VERIFICATION (mandatory — run this checklist in thought before every `answer` call):
-- Re-read the original question word-by-word and verify each point before submitting:
-   - Before calling answer, re-read the question to verify: content vs. surrogate ID, aggregation/distinct level, qualifier scope, column order, row completeness, and no extra columns.
+Re-read the original question word-by-word and verify each point before submitting:
+
+  1. CONTENT vs IDENTIFIER: Does the question ask for the *thing itself* or just a *label*?
+    - "what is the comment / name / text / description" → return the TEXT column, NOT the Id/key column.
+    - "which event / driver / patient" → return the NAME/identifying column, not a surrogate key.
+  2. AGGREGATION LEVEL: Does the question imply uniqueness or counting?
+    - "total / sum" → SUM.   "average / mean / per [unit]" → AVG, not SUM÷N post-hoc.
+        If the question says "average monthly", use AVG in SQL — do not divide a yearly total by 12.
+    - "how many" → COUNT.   "how many distinct / unique" → COUNT(DISTINCT ...).
+    - Do NOT return one row per raw record when the question expects a rolled-up result.
+  3. QUALIFIER TRANSLATION: Are there unit or scope qualifiers?
+    - "per unit / per item" → condition must be Price/Amount > N, NOT Price > N alone.
+    - "not yet X years old" → age < X strictly (not ≤).
+    - "more than N posts" → COUNT > N (not ≥ N).
+  4. ROW COMPLETENESS: Are ALL matching rows returned?
+    - If multiple rows satisfy the condition equally, return ALL of them — not just the closest or first.
+  5. EXTRA COLUMNS: Strip any column the question did NOT ask for.
+    - Do not include CustomerID, molecule_id, etc. when the question only asks for Consumption or element.
 
 FORMAT RULES:
 
