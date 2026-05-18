@@ -36,8 +36,6 @@ IMPORTANT PLANNING METHODOLOGY:
 First, understand the task completely. Extract relevant information and variables needed to solve the problem.
 Devise a complete plan with clear steps to gather necessary data through tools.
 Then, execute the plan step by step, carefully validating each result.
-Pay attention to data consistency and logical coherence in your reasoning.
-Before submitting the final answer, verify that the table schema matches the task context and that you are not using placeholder column names.
 
 DATASET-COLUMN RULES:
 - Always prefer the exact column names that exist in the task `context/` files (CSV/JSON/DB). Do not invent new column names.
@@ -57,34 +55,47 @@ Rules:
 6. The task is complete only when you call the `answer` tool.
 7. The `answer` tool must receive a table with `columns` and `rows`.
 8. If the submitted answer would have empty rows but there is still time and step budget left, keep reasoning and try again instead of finalizing immediately.
+9. Before calling `answer`, check every item in PRE-ANSWER VERIFICATION in your thought.
+10. After receiving each tool result, state in thought: what you expected, what you got, and whether it advances the plan. If the result is empty, an error, or inconsistent with prior observations, revise the plan before the next tool call.
 
-Keep reasoning structured: first understand, then plan, then execute.
+PRE-ANSWER VERIFICATION (mandatory — run this checklist in thought before every `answer` call):
+Re-read the original question word-by-word and verify each point before submitting:
+
+  1. CONTENT vs IDENTIFIER: Does the question ask for the *thing itself* or just a *label*?
+    - "what is the comment / name / text / description" → return the TEXT column, NOT the Id/key column.
+    - "which event / driver / patient" → return the NAME/identifying column, not a surrogate key.
+  2. AGGREGATION LEVEL: Does the question imply uniqueness or counting?
+    - "total / sum" → SUM.   "average / mean / per [unit]" → AVG, not SUM÷N post-hoc.
+        If the question says "average monthly", use AVG in SQL — do not divide a yearly total by 12.
+    - "how many" → COUNT.   "how many distinct / unique" → COUNT(DISTINCT ...).
+    - Do NOT return one row per raw record when the question expects a rolled-up result.
+  3. QUALIFIER TRANSLATION: Are there unit or scope qualifiers?
+    - "per unit / per item" → condition must be Price/Amount > N, NOT Price > N alone.
+    - "not yet X years old" → age < X strictly (not ≤).
+    - "more than N posts" → COUNT > N (not ≥ N).  
+  4. ROW COMPLETENESS: Are ALL matching rows returned?
+    - If multiple rows satisfy the condition equally, return ALL of them — not just the closest or first.
 """.strip()
 
 RESPONSE_EXAMPLES = """
-Example response when planning first (Plan-and-Solve approach):
+Example response when planning first:
 ```json
 {"thought":"I need to gather data about the task. Let me start by exploring the context.","plan":"1. List available files\n2. Inspect relevant files\n3. Filter and process data\n4. Prepare final answer","action":"list_context","action_input":{"max_depth":4}}
 ```
 
 Example response when you have the final answer:
 ```json
-{"thought":"I have processed all necessary data and can now provide the final answer.","plan":"","action":"answer","action_input":{"columns":["average_long_shots"],"rows":[["63.5"]]}}
+{"thought":"'average_long_shots' confirmed in context. Question asks for a numerical average, not an ID. Value: 63.5.","plan":"","action":"answer","action_input":{"columns":["average_long_shots"],"rows":[["63.5"]]}}
 ```
 
-Example: when the dataset has `first_name` and `last_name` columns but the question asks for full names, return the dataset columns instead of inventing `full_name`:
+Example response after receiving a tool result — verify then continue:
 ```json
-{"thought":"The context has columns first_name and last_name; I'll return those.","plan":"","action":"answer","action_input":{"columns":["first_name","last_name"],"rows":[["Trent","Smith"],["Tyler","Hewitt"]]}}
+{"thought":"[Expected] T1.csv has a 'salary' column. [Got] Columns: emp_id, full_name, annual_comp, dept — no 'salary'; 'annual_comp' is the salary field. [Revised] Use 'annual_comp' for the filter condition.","plan":"1. List files\n2. ✓Inspect T1.csv\n3. Filter annual_comp > threshold, return full_name\n4. Answer","action":"read_doc","action_input":{"path":"salary_thresholds.csv"}}
 ```
 
-Example: when an aggregate is required, name the aggregate column using a SQL-like expression built from context columns:
+Example: aggregate column naming:
 ```json
-{"thought":"I will compute the total cost per member using the cost column in T2.","plan":"","action":"answer","action_input":{"columns":["first_name","last_name","SUM(T2.cost)"],"rows":[["Sacha","Harrison","866.25"]]}}
-```
-
-Example: when the question asks which event has the lowest cost, return only the event-identifying column, not the cost column:
-```json
-{"thought":"The question asks for the event with the lowest cost, so I should output only the event name.","plan":"","action":"answer","action_input":{"columns":["event_name"],"rows":[["September Speaker"]]}}
+{"thought":"Columns first_name, last_name (T1), SUM(T2.cost) — all confirmed in context. Total cost per member computed.","plan":"","action":"answer","action_input":{"columns":["first_name","last_name","SUM(T2.cost)"],"rows":[["Sacha","Harrison","866.25"]]}}
 ```
 """.strip()
 
@@ -124,7 +135,6 @@ def build_task_prompt(task: PublicTask) -> str:
         f"Question: {task.question}\n"
         "All tool file paths are relative to the task context directory. "
         "Inspect context documents such as knowledge guides or schema notes to infer the required output columns before calling `answer`. "
-        "Prefer dataset column names in your final table. Use only the output columns that the question actually requires; do not include helper columns or computed columns unless the question explicitly asks for them. If the question asks for combined or derived fields, map them to the dataset columns (e.g., first_name + last_name instead of full_name) or name aggregates using SQL-like expressions (e.g., SUM(T2.cost)). "
         "When you have the final table, call the `answer` tool."
     )
 
@@ -174,7 +184,9 @@ List completed subtasks or successful outcomes, with brief results if applicable
 
 ### [Output Format]
 
-Do **not** include the input or any additional explanation. Only return the formatted summary.
+Do **not** include the input or any additional explanation. Only return the formatted summary. Begin your summary with the exact line `# History Summary`, then fill in the sections below.
+
+# History Summary
 
 ### FILES
 Discovered but not yet queried:
