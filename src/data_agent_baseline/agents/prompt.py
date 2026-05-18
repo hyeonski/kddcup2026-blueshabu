@@ -36,14 +36,13 @@ IMPORTANT PLANNING METHODOLOGY:
 First, understand the task completely. Extract relevant information and variables needed to solve the problem.
 Devise a complete plan with clear steps to gather necessary data through tools.
 Then, execute the plan step by step, carefully validating each result.
+When reading any `.md` file, always specify `max_chars` ≥ 50000 — `.md` files routinely exceed the 4000-char default and return truncated data.
 
 DATASET-COLUMN RULES:
 - Always prefer the exact column names that exist in the task `context/` files (CSV/JSON/DB). Do not invent new column names.
 - Answer with the smallest schema that still directly answers the question. Do not add helper columns, intermediate metrics, or extra columns that the question did not ask for.
 - If the question asks for "which X has the lowest/highest Y", return only the identifying column(s) for X unless the question explicitly asks for Y as well.
-- If the question requests a derived or combined value (for example "full name"), prefer to return the underlying dataset columns (for example `first_name`, `last_name`) unless the context already contains a single `full_name` column.
-- For aggregate values (SUM, COUNT, AVG, etc.), name the column using a clear SQL-like expression built from the dataset column names (for example: `SUM(T2.cost)`). This helps downstream scoring expect the same schema.
-- When the task requires joining tables, refer to columns by their dataset table-qualified names or by the CSV filename context (for example `T2.cost` when the file is named `T2.csv`).
+- NEVER concatenate separate dataset fields into one output column. If the question asks for "full name" but the dataset stores `first_name` and `last_name` as separate columns, return them as **two separate columns**. The question's phrasing ("full name") describes the concept, not the column count — always follow the underlying data structure.
 - If you cannot find a requested column in the context, explicitly state which column names you could not find in your `thought` before attempting an `answer`.
 
 Rules:
@@ -65,16 +64,18 @@ Re-read the original question word-by-word and verify each point before submitti
     - "what is the comment / name / text / description" → return the TEXT column, NOT the Id/key column.
     - "which event / driver / patient" → return the NAME/identifying column, not a surrogate key.
   2. AGGREGATION LEVEL: Does the question imply uniqueness or counting?
-    - "total / sum" → SUM.   "average / mean / per [unit]" → AVG, not SUM÷N post-hoc.
-        If the question says "average monthly", use AVG in SQL — do not divide a yearly total by 12.
+    - "total / sum" → SUM.   "average / mean / per [unit]" → use the built-in AVG function, not SUM÷N post-hoc.
     - "how many" → COUNT.   "how many distinct / unique" → COUNT(DISTINCT ...).
     - Do NOT return one row per raw record when the question expects a rolled-up result.
+    - Numeric answer values must be bare numbers — never append %, units (km/h, kg), or currency symbols.
   3. QUALIFIER TRANSLATION: Are there unit or scope qualifiers?
     - "per unit / per item" → condition must be Price/Amount > N, NOT Price > N alone.
     - "not yet X years old" → age < X strictly (not ≤).
-    - "more than N posts" → COUNT > N (not ≥ N).  
+    - "more than N posts" → COUNT > N (not ≥ N).
+    - "How many times was/is X more than Y?" or "X is how many times larger than Y?" → return the RATIO X÷Y as a decimal number, NOT a count of events (e.g., if X=140 and Y=55, answer is 2.55, not 1).
   4. ROW COMPLETENESS: Are ALL matching rows returned?
     - If multiple rows satisfy the condition equally, return ALL of them — not just the closest or first.
+  5. DISTINCTNESS: When the question asks to "tally / list / enumerate / identify types, categories, or elements", the answer must contain DISTINCT values — do NOT return one row per raw record. Apply deduplication before finalizing rows.
 """.strip()
 
 RESPONSE_EXAMPLES = """
@@ -83,9 +84,9 @@ Example response when planning first:
 {"thought":"I need to gather data about the task. Let me start by exploring the context.","plan":"1. List available files\n2. Inspect relevant files\n3. Filter and process data\n4. Prepare final answer","action":"list_context","action_input":{"max_depth":4}}
 ```
 
-Example response when you have the final answer:
+Example response when you have the final answer (run PRE-ANSWER VERIFICATION in thought first):
 ```json
-{"thought":"'average_long_shots' confirmed in context. Question asks for a numerical average, not an ID. Value: 63.5.","plan":"","action":"answer","action_input":{"columns":["average_long_shots"],"rows":[["63.5"]]}}
+{"thought":"PRE-ANSWER VERIFICATION: [1]numeric value not ID ✓ [2]single AVG, no rollup issues ✓ [3]no qualifier ✓ [4]1 row ✓ [5]distinct n/a. Value 63.5 confirmed in context.","plan":"","action":"answer","action_input":{"columns":["average_long_shots"],"rows":[["63.5"]]}}
 ```
 
 Example response after receiving a tool result — verify then continue:
@@ -93,9 +94,9 @@ Example response after receiving a tool result — verify then continue:
 {"thought":"[Expected] T1.csv has a 'salary' column. [Got] Columns: emp_id, full_name, annual_comp, dept — no 'salary'; 'annual_comp' is the salary field. [Revised] Use 'annual_comp' for the filter condition.","plan":"1. List files\n2. ✓Inspect T1.csv\n3. Filter annual_comp > threshold, return full_name\n4. Answer","action":"read_doc","action_input":{"path":"salary_thresholds.csv"}}
 ```
 
-Example: aggregate column naming:
+Example: "full name" question must return separate columns — never concatenate (PRE-ANSWER VERIFICATION shown):
 ```json
-{"thought":"Columns first_name, last_name (T1), SUM(T2.cost) — all confirmed in context. Total cost per member computed.","plan":"","action":"answer","action_input":{"columns":["first_name","last_name","SUM(T2.cost)"],"rows":[["Sacha","Harrison","866.25"]]}}
+{"thought":"PRE-ANSWER VERIFICATION: [1]text names not IDs ✓ [2]SUM computed ✓ [3]no qualifier ✓ [4]1 row ✓ [5]distinct n/a. 'full name' = first_name + last_name as TWO separate columns — never combine into one.","plan":"","action":"answer","action_input":{"columns":["first_name","last_name","SUM(T2.cost)"],"rows":[["Sacha","Harrison","866.25"]]}}
 ```
 """.strip()
 
