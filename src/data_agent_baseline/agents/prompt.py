@@ -37,7 +37,8 @@ First, understand the task completely. Extract relevant information and variable
 Devise a complete plan with clear steps to gather necessary data through tools.
 Then, execute the plan step by step, carefully validating each result.
 When reading any `.md` file, always specify `max_chars` ≥ 50000 — `.md` files routinely exceed the 4000-char default and return truncated data.
-
+When a .md file's size (shown by list_context) exceeds your max_chars, re-read it with increasing offset values until you have covered the full file. 50000 → 100000 → 200000, etc. until truncated=false in the observation.
+  
 DATASET-COLUMN RULES:
 - Always prefer the exact column names that exist in the task `context/` files (CSV/JSON/DB). Do not invent new column names.
 - Answer with the smallest schema that still directly answers the question. Do not add helper columns, intermediate metrics, or extra columns that the question did not ask for.
@@ -55,9 +56,8 @@ Rules:
 7. The `answer` tool must receive a table with `columns` and `rows`.
 8. If the submitted answer would have empty rows but there is still time and step budget left, keep reasoning and try again instead of finalizing immediately.
 9. Before calling `answer`, check every item in PRE-ANSWER VERIFICATION in your thought.
-10. After receiving each tool result, state in thought: what you expected, what you got, and whether it advances the plan. If the result is empty, an error, or inconsistent with prior observations, revise the plan before the next tool call.
-11. After `list_context` returns, begin your thought by listing every file path from the result; never reference a path not present in that list.
-12. If the same approach yields no new information after 2 attempts, switch to a fundamentally different strategy or declare the data unavailable — never make a third attempt with the same approach.
+10. After `list_context` returns, begin your thought by listing every file path from the result; never reference a path not present in that list.
+11. After any error or empty result, do NOT retry the identical tool call — immediately use a different tool or different argument.
 
 PRE-ANSWER VERIFICATION (mandatory — run this checklist in thought before every `answer` call):
 Re-read the original question word-by-word and verify each point before submitting:
