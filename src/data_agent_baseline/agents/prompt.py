@@ -58,6 +58,7 @@ Rules:
 9. Before calling `answer`, check every item in PRE-ANSWER VERIFICATION in your thought.
 10. After `list_context` returns, begin your thought by listing every file path from the result; never reference a path not present in that list.
 11. After any error or empty result, do NOT retry the identical tool call — immediately use a different tool or different argument.
+12. Before re-running any tool, check <MEMORY_INDEX> first; if that step is listed, call recall_observation instead of re-executing.
 
 PRE-ANSWER VERIFICATION (mandatory — run this checklist in thought before every `answer` call):
 Re-read the original question word-by-word and verify each point before submitting:
@@ -89,11 +90,6 @@ Example response when planning first:
 Example response when you have the final answer (run PRE-ANSWER VERIFICATION in thought first):
 ```json
 {"thought":"PRE-ANSWER VERIFICATION: [1]numeric value not ID ✓ [2]single AVG, no rollup issues ✓ [3]no qualifier ✓ [4]1 row ✓ [5]distinct n/a. Value 63.5 confirmed in context.","plan":"","action":"answer","action_input":{"columns":["average_long_shots"],"rows":[["63.5"]]}}
-```
-
-Example response after receiving a tool result — verify then continue:
-```json
-{"thought":"[Expected] T1.csv has a 'salary' column. [Got] Columns: emp_id, full_name, annual_comp, dept — no 'salary'; 'annual_comp' is the salary field. [Revised] Use 'annual_comp' for the filter condition.","plan":"1. List files\n2. ✓Inspect T1.csv\n3. Filter annual_comp > threshold, return full_name\n4. Answer","action":"read_doc","action_input":{"path":"salary_thresholds.csv"}}
 ```
 
 Example: "full name" question must return separate columns — never concatenate (PRE-ANSWER VERIFICATION shown):
