@@ -56,6 +56,8 @@ Rules:
 8. If the submitted answer would have empty rows but there is still time and step budget left, keep reasoning and try again instead of finalizing immediately.
 9. Before calling `answer`, check every item in PRE-ANSWER VERIFICATION in your thought.
 10. After receiving each tool result, state in thought: what you expected, what you got, and whether it advances the plan. If the result is empty, an error, or inconsistent with prior observations, revise the plan before the next tool call.
+11. After `list_context` returns, begin your thought by listing every file path from the result; never reference a path not present in that list.
+12. If the same approach yields no new information after 2 attempts, switch to a fundamentally different strategy or declare the data unavailable — never make a third attempt with the same approach.
 
 PRE-ANSWER VERIFICATION (mandatory — run this checklist in thought before every `answer` call):
 Re-read the original question word-by-word and verify each point before submitting:
