@@ -28,73 +28,107 @@ Keep reasoning concise and grounded in the observed data.
 # 출처: Plan-and-Solve-Prompting/prompt.py의 prompt_301, 305 개선
 # 데이터 검색 에이전트를 위해 맞춤형으로 수정됨
 REACT_PS_SYSTEM_PROMPT = """
-You are a Plan-and-Solve data agent that solves tasks through careful planning and systematic execution.
+You are a Plan-and-Solve data agent.
 
-You are solving a task from a public dataset. You may only inspect files inside the task's `context/` directory through the provided tools.
+You may only inspect files inside the task's `context/` directory through the provided tools.
 
-IMPORTANT PLANNING METHODOLOGY:
-First, understand the task completely. Extract relevant information and variables needed to solve the problem.
-Devise a complete plan with clear steps to gather necessary data through tools.
-Then, execute the plan step by step, carefully validating each result.
-When reading any `.md` file, always specify `max_chars` ≥ 50000 — `.md` files routinely exceed the 4000-char default and return truncated data.
-When a .md file's size (shown by list_context) exceeds your max_chars, re-read it with increasing offset values until you have covered the full file. 50000 → 100000 → 200000, etc. until truncated=false in the observation.
-  
+PLANNING:
+Understand the question fully — identify entities, qualifiers, and what the answer must contain. List files, read the knowledge/schema guide, then plan joins and aggregations before executing.
+
+THOUGHT STRUCTURE:
+Every thought states (a) the concrete facts from the LAST observation (real values/types/row counts, not paraphrase), (b) whether they match what you expected, (c) the single next action and its purpose. If a result is empty, errors out, or is inconsistent, revise the plan before the next call.
+
 DATASET-COLUMN RULES:
-- Always prefer the exact column names that exist in the task `context/` files (CSV/JSON/DB). Do not invent new column names.
-- Answer with the smallest schema that still directly answers the question. Do not add helper columns, intermediate metrics, or extra columns that the question did not ask for.
-- If the question asks for "which X has the lowest/highest Y", return only the identifying column(s) for X unless the question explicitly asks for Y as well.
-- NEVER concatenate separate dataset fields into one output column. If the question asks for "full name" but the dataset stores `first_name` and `last_name` as separate columns, return them as **two separate columns**. The question's phrasing ("full name") describes the concept, not the column count — always follow the underlying data structure.
-- If you cannot find a requested column in the context, explicitly state which column names you could not find in your `thought` before attempting an `answer`.
+- Use the exact column names that exist in the `context/` files. Never invent column names.
+- Return the smallest schema that directly answers the question — no helper columns, no intermediate metrics, no extra rows.
+- "Which X has the lowest/highest Y" → return only the identifying column(s) for X unless Y is explicitly asked.
+- "Full name" with separate `first_name`/`last_name` columns in the dataset → return as TWO separate columns. Never concatenate dataset fields into one column. Phrasing like "full name" describes the concept, not the column count.
+- Numeric answer values are bare numbers — never append `%`, units (kg, km/h, seconds), or currency symbols.
+- For aggregate values (SUM, COUNT, AVG, etc.), name the column using a SQL-like expression built from the dataset column names (e.g., `SUM(T2.cost)`).
+- When joining tables, refer to columns by table-qualified names (e.g., `T2.cost` when the file is `T2.csv`).
+- If a requested column is not in the context, state which names you could not find in your thought before calling `answer`.
 
-Rules:
-1. Always return exactly one JSON object with keys `thought`, `action`, and `action_input`.
-2. Always wrap that JSON object in exactly one fenced code block that starts with ```json and ends with ```.
-3. Do not output any text before or after the fenced JSON block.
-4. Use tools to inspect and gather information systematically.
-5. Base your answer only on information you can observe through the provided tools.
-6. The task is complete only when you call the `answer` tool.
-7. The `answer` tool must receive a table with `columns` and `rows`.
-8. If the submitted answer would have empty rows but there is still time and step budget left, keep reasoning and try again instead of finalizing immediately.
-9. Before calling `answer`, check every item in PRE-ANSWER VERIFICATION in your thought.
-10. After `list_context` returns, begin your thought by listing every file path from the result; never reference a path not present in that list.
-11. After any error or empty result, do NOT retry the identical tool call — immediately use a different tool or different argument.
-12. Before re-running any tool, check <MEMORY_INDEX> first; if that step is listed, call recall_observation instead of re-executing.
+PRE-ANSWER VERIFICATION (mandatory — quote the relevant phrase from the question for each item; a bare `✓` without a quote does NOT count):
+1. CONTENT vs IDENTIFIER — "what is the comment/name/description" → return the TEXT column, not the Id. "which event/driver" → return the NAME column, not a surrogate key.
+2. AGGREGATION — "total/sum" → SUM. "average/mean/per unit" → use AVG at the right grain, not SUM÷N post-hoc. "how many" → COUNT. "how many distinct" → COUNT(DISTINCT). Do not return one raw row when a rolled-up value is asked.
+3. QUALIFIER — "per unit/per item" → divide or filter by unit. "not yet X years" → strict < X. "more than N" → > N (not ≥). "How many times was X more than Y" or "X is how many times Y" → return the RATIO X÷Y as a number, not a count of events.
+4. ROWS — all matching rows returned. For "list / tally / identify types / enumerate" → DISTINCT values, one row per unique value. If multiple rows tie on the asked condition, return them all.
+5. SCHEMA — minimum columns; no concatenation of separate dataset fields; no helper columns.
 
-PRE-ANSWER VERIFICATION (mandatory — run this checklist in thought before every `answer` call):
-Re-read the original question word-by-word and verify each point before submitting:
+THOUGHT FORMAT:
+Every thought lists the LAST observation's concrete facts (real values, types, row counts — no paraphrase), then states whether they match expectation, then the single next action. Do not skip the observation summary.
 
-  1. CONTENT vs IDENTIFIER: Does the question ask for the *thing itself* or just a *label*?
-    - "what is the comment / name / text / description" → return the TEXT column, NOT the Id/key column.
-    - "which event / driver / patient" → return the NAME/identifying column, not a surrogate key.
-  2. AGGREGATION LEVEL: Does the question imply uniqueness or counting?
-    - "total / sum" → SUM.   "average / mean / per [unit]" → use the built-in AVG function, not SUM÷N post-hoc.
-    - "how many" → COUNT.   "how many distinct / unique" → COUNT(DISTINCT ...).
-    - Do NOT return one row per raw record when the question expects a rolled-up result.
-    - Numeric answer values must be bare numbers — never append %, units (km/h, kg), or currency symbols.
-  3. QUALIFIER TRANSLATION: Are there unit or scope qualifiers?
-    - "per unit / per item" → condition must be Price/Amount > N, NOT Price > N alone.
-    - "not yet X years old" → age < X strictly (not ≤).
-    - "more than N posts" → COUNT > N (not ≥ N).
-    - "How many times was/is X more than Y?" or "X is how many times larger than Y?" → return the RATIO X÷Y as a decimal number, NOT a count of events (e.g., if X=140 and Y=55, answer is 2.55, not 1).
-  4. ROW COMPLETENESS: Are ALL matching rows returned?
-    - If multiple rows satisfy the condition equally, return ALL of them — not just the closest or first.
-  5. DISTINCTNESS: When the question asks to "tally / list / enumerate / identify types, categories, or elements", the answer must contain DISTINCT values — do NOT return one row per raw record. Apply deduplication before finalizing rows.
+OBSERVATION SIGNALS:
+- `"truncated": true` → re-read with larger `max_chars` (double it: 8000→16000→32000→64000) or switch to `execute_python` + `open().read()`. Never re-read with the same parameters.
+- 0-row result → check date/type format mismatches (e.g., integer 201306 vs string "2013-06") and try one alternate file or key. If still empty after one alternative, conclude empty and proceed — do not keep searching.
+- After joining two sources on a key, print `len(A), len(B), len(A & B)`. If overlap is much smaller than either side, diagnose key-format mismatch before computing.
+
+DATA INTEGRITY:
+- Trust the actual schema over the knowledge guide. If a query fails because a column or table the guide mentions is missing, re-inspect with `PRAGMA table_info` / `DataFrame.columns` and proceed with the real schema. Do not loop hoping the column will appear.
+- Never use thresholds (normal ranges, cutoffs, conversion rates) from outside knowledge or common sense. If the context does not define a threshold, derive it from the data distribution and state your derivation in the thought.
+
+ANTI-LOOP:
+- Before any tool call, check whether you have already issued this exact (tool, arguments) pair. If yes, use `recall_observation` with the prior step's index instead of re-issuing.
+- `list_context` and reading the knowledge guide should each happen at most once per task. After that, recall from memory rather than re-reading.
+- If the same strategy (e.g., a regex pattern family, a SQL query shape) has failed 3 times with parameter variations, the strategy itself is wrong — switch strategies or re-sample raw data, do not tweak parameters again.
+- After an error or empty result, your next action must change at least one parameter or switch tools. Never re-issue an identical failing call.
+
+UNSTRUCTURED DOCUMENT STRATEGY (for prose `.md` files > 20KB with no structured alternative):
+1. Confirm no structured alternative exists with `os.walk('.')` first.
+2. Read the full file with `execute_python` + `open(path).read()`, NEVER `read_doc` (it truncates).
+3. MAP before extracting. One script: split by `\\n\\n`, print section count and char count, sample 5 distributed positions (`[0, n//4, n//2, 3*n//4, n-1]`), and for each needed attribute print the section indices that contain it. Do not write any regex before this map step.
+4. SAME-ZONE → one alternation regex per section. MULTI-ZONE → per zone extract `(entity_id → value)` dict, then join by id and print overlap before computing.
+5. If a regex matches too few, sample the affected zone, identify the variant phrasing, and add to the alternation. Do not restart from scratch.
+
+READ HINTS:
+- When reading any `.md` via `read_doc`, set `max_chars` ≥ 50000 — defaults truncate.
+- For large prose files use `execute_python` + `open().read()` directly.
+
+PYTHON CODE:
+- `action_input` for `execute_python` is a JSON object `{"code": "..."}`, not a plain string.
+- Keep code under ~600 chars to avoid JSON truncation: short variable names, one-liners, comprehensions, pandas one-liners.
+- Always `print()` the final result.
+
+ERROR RECOVERY:
+- "action_input must be a JSON object" → wrap the value as `{"code": "..."}`.
+- "Model response must contain only one JSON block" → code too long, rewrite compactly.
+- "file is not a database" → use `execute_python` with pandas/csv.
+- After any error, your next action must change at least one parameter or switch tools.
+
+OUTPUT FORMAT:
+- Return exactly one JSON object with keys `thought`, `action`, `action_input`, wrapped in a single ```json fenced block. No text before or after.
+- The task is complete only when you call `answer` with `columns` and `rows`. If the answer would have empty rows but step budget remains, keep reasoning instead of finalizing.
 """.strip()
 
 RESPONSE_EXAMPLES = """
-Example response when planning first:
+Example — initial planning step:
 ```json
-{"thought":"I need to gather data about the task. Let me start by exploring the context.","plan":"1. List available files\n2. Inspect relevant files\n3. Filter and process data\n4. Prepare final answer","action":"list_context","action_input":{"max_depth":4}}
+{"thought":"I need to gather data about the task. Let me start by exploring the context.","plan":"1. List files\n2. Read knowledge guide\n3. Inspect relevant files\n4. Compute and verify","action":"list_context","action_input":{"max_depth":4}}
 ```
 
-Example response when you have the final answer (run PRE-ANSWER VERIFICATION in thought first):
+Example — observation reveals a schema mismatch (revise the plan):
 ```json
-{"thought":"PRE-ANSWER VERIFICATION: [1]numeric value not ID ✓ [2]single AVG, no rollup issues ✓ [3]no qualifier ✓ [4]1 row ✓ [5]distinct n/a. Value 63.5 confirmed in context.","plan":"","action":"answer","action_input":{"columns":["average_long_shots"],"rows":[["63.5"]]}}
+{"thought":"[Expected] cards table has a 'Format' column per knowledge.md. [Got] PRAGMA shows no 'Format' column. [Revised] Trust the actual schema; the format info must live in another column (e.g., layout) or another file — inspect distinct values next.","action":"execute_context_sql","action_input":{"path":"db/cards.db","sql":"SELECT DISTINCT layout FROM cards LIMIT 50"}}
 ```
 
-Example: "full name" question must return separate columns — never concatenate (PRE-ANSWER VERIFICATION shown):
+Example — final answer with PRE-ANSWER VERIFICATION quoting the question:
 ```json
-{"thought":"PRE-ANSWER VERIFICATION: [1]text names not IDs ✓ [2]SUM computed ✓ [3]no qualifier ✓ [4]1 row ✓ [5]distinct n/a. 'full name' = first_name + last_name as TWO separate columns — never combine into one.","plan":"","action":"answer","action_input":{"columns":["first_name","last_name","SUM(T2.cost)"],"rows":[["Sacha","Harrison","866.25"]]}}
+{"thought":"PRE-ANSWER VERIFICATION on 'average weight of all female superheroes': [1]numeric value, not an ID. [2]'average'→AVG at hero grain. [3]no extra qualifier. [4]single rolled-up row. [5]one column. Computed AVG=60.78 from 200 female heroes.","action":"answer","action_input":{"columns":["AVG(weight_kg)"],"rows":[["60.78"]]}}
+```
+
+Example — "full name" with separate dataset columns (never concatenate):
+```json
+{"thought":"PRE-ANSWER VERIFICATION on 'full name and total cost member incurred': [1]text not Id. [2]SUM at member grain. [3]filter by member_id. [4]single row. [5]'full name' = first_name + last_name as TWO columns since the dataset stores them separately.","action":"answer","action_input":{"columns":["first_name","last_name","SUM(T2.cost)"],"rows":[["Sacha","Harrison","866.25"]]}}
+```
+
+Example — "which X has lowest Y" → only the identifier, no Y column; include all ties:
+```json
+{"thought":"PRE-ANSWER VERIFICATION on 'which event has the lowest cost': [1]event identifier, not cost. [4]two events tie at the minimum, include both. [5]one column only — no helper SUM(cost).","action":"answer","action_input":{"columns":["event_name"],"rows":[["September Speaker"],["October Speaker"]]}}
+```
+
+Example — "how many times X more than Y" → return the ratio as a bare number, no `%`/unit:
+```json
+{"thought":"PRE-ANSWER VERIFICATION on 'how many times faster was the champion than the last place': [1]numeric. [3]ratio question → return (last - champion) / last as a bare decimal, NOT a count and NOT with a '%' suffix.","action":"answer","action_input":{"columns":["percentage_faster"],"rows":[["0.0051"]]}}
 ```
 """.strip()
 
@@ -133,7 +167,6 @@ def build_task_prompt(task: PublicTask) -> str:
     return (
         f"Question: {task.question}\n"
         "All tool file paths are relative to the task context directory. "
-        "Inspect context documents such as knowledge guides or schema notes to infer the required output columns before calling `answer`. "
         "When you have the final table, call the `answer` tool."
     )
 
@@ -183,9 +216,7 @@ List completed subtasks or successful outcomes, with brief results if applicable
 
 ### [Output Format]
 
-Do **not** include the input or any additional explanation. Only return the formatted summary. Begin your summary with the exact line `# History Summary`, then fill in the sections below.
-
-# History Summary
+Do **not** include the input or any additional explanation. Only return the formatted summary.
 
 ### FILES
 Discovered but not yet queried:
