@@ -4,6 +4,7 @@ import csv
 import json
 import multiprocessing
 import os
+import queue as _stdlib_queue
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
@@ -301,35 +302,27 @@ def _run_single_task_with_timeout(
         args=(task_id, config, str(checkpoint_path) if checkpoint_path else None, queue),
     )
     process.start()
-    process.join(timeout_seconds)
 
-    if process.is_alive():
-        process.terminate()
-        process.join(timeout=1.0)
+    try:
+        result = queue.get(timeout=timeout_seconds)
+    except _stdlib_queue.Empty:
         if process.is_alive():
-            process.kill()
-            process.join()
+            process.terminate()
+            process.join(timeout=1.0)
+            if process.is_alive():
+                process.kill()
+                process.join()
         return _recover_from_checkpoint(
             task_id,
             checkpoint_path,
             f"Task timed out after {timeout_seconds} seconds.",
         )
 
-    if queue.empty():
-        exit_code = process.exitcode
-        if exit_code not in (None, 0):
-            return _recover_from_checkpoint(
-                task_id,
-                checkpoint_path,
-                f"Task exited unexpectedly with exit code {exit_code}.",
-            )
-        return _recover_from_checkpoint(
-            task_id,
-            checkpoint_path,
-            "Task exited without returning a result.",
-        )
+    process.join(timeout=5.0)
+    if process.is_alive():
+        process.terminate()
+        process.join()
 
-    result = queue.get()
     if result.get("ok"):
         return dict(result["run_result"])
     return _recover_from_checkpoint(

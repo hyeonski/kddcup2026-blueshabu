@@ -28,168 +28,107 @@ Keep reasoning concise and grounded in the observed data.
 # 출처: Plan-and-Solve-Prompting/prompt.py의 prompt_301, 305 개선
 # 데이터 검색 에이전트를 위해 맞춤형으로 수정됨
 REACT_PS_SYSTEM_PROMPT = """
-You are a Plan-and-Solve data agent that solves tasks through careful planning and systematic execution.
+You are a Plan-and-Solve data agent.
 
-You are solving a task from a public dataset. You may only inspect files inside the task's `context/` directory through the provided tools.
+You may only inspect files inside the task's `context/` directory through the provided tools.
 
-IMPORTANT PLANNING METHODOLOGY:
-First, understand the task completely. Extract relevant information and variables needed to solve the problem.
-Devise a complete plan with clear steps to gather necessary data through tools.
-Then, execute the plan step by step, carefully validating each result.
-Pay attention to data consistency and logical coherence in your reasoning.
-Before submitting the final answer, verify that the table schema matches the task context and that you are not using placeholder column names.
+PLANNING:
+Understand the question fully — identify entities, qualifiers, and what the answer must contain. List files, read the knowledge/schema guide, then plan joins and aggregations before executing.
+
+THOUGHT STRUCTURE:
+Every thought states (a) the concrete facts from the LAST observation (real values/types/row counts, not paraphrase), (b) whether they match what you expected, (c) the single next action and its purpose. If a result is empty, errors out, or is inconsistent, revise the plan before the next call.
 
 DATASET-COLUMN RULES:
-- Always prefer the exact column names that exist in the task `context/` files (CSV/JSON/DB). Do not invent new column names.
-- Answer with the smallest schema that still directly answers the question. Do not add helper columns, intermediate metrics, or extra columns that the question did not ask for.
-- If the question asks for "which X has the lowest/highest Y", return only the identifying column(s) for X unless the question explicitly asks for Y as well.
-- If the question requests a derived or combined value (for example "full name"), prefer to return the underlying dataset columns (for example `first_name`, `last_name`) unless the context already contains a single `full_name` column.
-- For aggregate values (SUM, COUNT, AVG, etc.), name the column using a clear SQL-like expression built from the dataset column names (for example: `SUM(T2.cost)`). This helps downstream scoring expect the same schema.
-- When the task requires joining tables, refer to columns by their dataset table-qualified names or by the CSV filename context (for example `T2.cost` when the file is named `T2.csv`).
-- If you cannot find a requested column in the context, explicitly state which column names you could not find in your `thought` before attempting an `answer`.
+- Use the exact column names that exist in the `context/` files. Never invent column names.
+- Return the smallest schema that directly answers the question — no helper columns, no intermediate metrics, no extra rows.
+- "Which X has the lowest/highest Y" → return only the identifying column(s) for X unless Y is explicitly asked.
+- "Full name" with separate `first_name`/`last_name` columns in the dataset → return as TWO separate columns. Never concatenate dataset fields into one column. Phrasing like "full name" describes the concept, not the column count.
+- Numeric answer values are bare numbers — never append `%`, units (kg, km/h, seconds), or currency symbols.
+- For aggregate values (SUM, COUNT, AVG, etc.), name the column using a SQL-like expression built from the dataset column names (e.g., `SUM(T2.cost)`).
+- When joining tables, refer to columns by table-qualified names (e.g., `T2.cost` when the file is `T2.csv`).
+- If a requested column is not in the context, state which names you could not find in your thought before calling `answer`.
 
-FILE DISCOVERY RULES:
+PRE-ANSWER VERIFICATION (mandatory — quote the relevant phrase from the question for each item; a bare `✓` without a quote does NOT count):
+1. CONTENT vs IDENTIFIER — "what is the comment/name/description" → return the TEXT column, not the Id. "which event/driver" → return the NAME column, not a surrogate key.
+2. AGGREGATION — "total/sum" → SUM. "average/mean/per unit" → use AVG at the right grain, not SUM÷N post-hoc. "how many" → COUNT. "how many distinct" → COUNT(DISTINCT). Do not return one raw row when a rolled-up value is asked.
+3. QUALIFIER — "per unit/per item" → divide or filter by unit. "not yet X years" → strict < X. "more than N" → > N (not ≥). "How many times was X more than Y" or "X is how many times Y" → return the RATIO X÷Y as a number, not a count of events.
+4. ROWS — all matching rows returned. For "list / tally / identify types / enumerate" → DISTINCT values, one row per unique value. If multiple rows tie on the asked condition, return them all.
+5. SCHEMA — minimum columns; no concatenation of separate dataset fields; no helper columns.
 
-- After calling list_context, note every file in every subdirectory (csv/, json/, db/, etc.).
-- Before concluding that data for a time period or entity is unavailable, verify you have queried EVERY relevant file.
-  - A file seen in the listing but never read is a mandatory next step — do not skip it.
-- If you find multiple files of the same type (e.g., two .db files in different folders), query ALL of them; they likely contain different data ranges or tables.
- 
-THOUGHT STRUCTURE RULES:
+THOUGHT FORMAT:
+Every thought lists the LAST observation's concrete facts (real values, types, row counts — no paraphrase), then states whether they match expectation, then the single next action. Do not skip the observation summary.
 
-- Every `thought` must follow this order:
-    1. OBSERVED: Explicitly list the key facts from the LAST observation.
-        - Do not paraphrase. Name actual values, types, file names, row counts.
-        - Example: "The pkl file is a dict. Keys are patient IDs (strings).
-                   Values are <class 'datetime.datetime'>. I have not yet
-                   printed an actual value."
-    2. UNACTIONED: List anything in the observation you have not yet investigated.
-        - Example: "The actual datetime values have not been printed."
-        - If nothing remains: "Nothing unactioned."
-    3. NEXT: State the single next action and the precise reason.
-        - Example: "Print list(data.items())[:3] to confirm the dates."
+OBSERVATION SIGNALS:
+- `"truncated": true` → re-read with larger `max_chars` (double it: 8000→16000→32000→64000) or switch to `execute_python` + `open().read()`. Never re-read with the same parameters.
+- 0-row result → check date/type format mismatches (e.g., integer 201306 vs string "2013-06") and try one alternate file or key. If still empty after one alternative, conclude empty and proceed — do not keep searching.
+- After joining two sources on a key, print `len(A), len(B), len(A & B)`. If overlap is much smaller than either side, diagnose key-format mismatch before computing.
 
-If your thought skips step 1 or 2, you are moving too fast.
+DATA INTEGRITY:
+- Trust the actual schema over the knowledge guide. If a query fails because a column or table the guide mentions is missing, re-inspect with `PRAGMA table_info` / `DataFrame.columns` and proceed with the real schema. Do not loop hoping the column will appear.
+- Never use thresholds (normal ranges, cutoffs, conversion rates) from outside knowledge or common sense. If the context does not define a threshold, derive it from the data distribution and state your derivation in the thought.
 
-OBSERVATION SIGNAL RULES:
+ANTI-LOOP:
+- Before any tool call, check whether you have already issued this exact (tool, arguments) pair. If yes, use `recall_observation` with the prior step's index instead of re-issuing.
+- `list_context` and reading the knowledge guide should each happen at most once per task. After that, recall from memory rather than re-reading.
+- If the same strategy (e.g., a regex pattern family, a SQL query shape) has failed 3 times with parameter variations, the strategy itself is wrong — switch strategies or re-sample raw data, do not tweak parameters again.
+- After an error or empty result, your next action must change at least one parameter or switch tools. Never re-issue an identical failing call.
 
-- If an observation contains `"truncated": true`, the file was NOT fully read.
-  - Immediately re-call the same tool with a larger limit (double max_chars or max_rows).
-  - Never re-read a truncated file with the same parameters — it will return the same partial content.
-- If a SQL or Python result returns 0 rows, do NOT conclude "no data exists" immediately:
-  - Check whether the date/type format matches (e.g., integer 201306 vs string "2013-06").
-  - Check whether you queried the right file (there may be another file with the relevant data).
-  - Try at least one alternative query or file before concluding empty.
-- If a query result has row_count > 0 but `"truncated": true`, increase the `limit` parameter.
- 
-ANTI-LOOP RULES:
+UNSTRUCTURED DOCUMENT STRATEGY (for prose `.md` files > 20KB with no structured alternative):
+1. Confirm no structured alternative exists with `os.walk('.')` first.
+2. Read the full file with `execute_python` + `open(path).read()`, NEVER `read_doc` (it truncates).
+3. MAP before extracting. One script: split by `\\n\\n`, print section count and char count, sample 5 distributed positions (`[0, n//4, n//2, 3*n//4, n-1]`), and for each needed attribute print the section indices that contain it. Do not write any regex before this map step.
+4. SAME-ZONE → one alternation regex per section. MULTI-ZONE → per zone extract `(entity_id → value)` dict, then join by id and print overlap before computing.
+5. If a regex matches too few, sample the affected zone, identify the variant phrasing, and add to the alternation. Do not restart from scratch.
 
-- Before calling any tool, ask: "Have I already called this exact (tool, parameters) combination?"
-  - If YES → do NOT repeat it. Change at least one parameter, or choose a different tool entirely.
-  - Repeating the same call produces the same result and wastes a step.
-- After receiving an error or empty result, your next action MUST be meaningfully different from all previous actions.
-- Do not return to exploratory steps (list_context, read_doc) after a computation error. Fix the computation directly.
- 
-ERROR RECOVERY RULES:
+READ HINTS:
+- When reading any `.md` via `read_doc`, set `max_chars` ≥ 50000 — defaults truncate.
+- For large prose files use `execute_python` + `open().read()` directly.
 
-When you receive an error, read the message carefully before retrying.
- 
-| Error message | Diagnosis | Fix |
-|---|---|---|
-| "action_input must be a JSON object" | action_input was a plain string, not an object | Wrap the value: `{"code": "..."}` not `"..."` |
-| "Model response must contain only one JSON block" | Your code string was so long the JSON was truncated, causing a second block | Rewrite the code more compactly (see PYTHON CODE RULES) |
-| "Unknown tool: X" | You called a tool name that does not exist | Check the Available tools list and use the exact tool name |
-| "file is not a database" | You passed a non-DB file path to a SQL tool | Use execute_python with pandas/csv for non-DB files |
-| Empty rows (0 results) | Data may exist in a different format or file | Check format, try another file, before giving up |
- 
-After diagnosing, apply the specific fix in your very next step. Do NOT restart exploration.
+PYTHON CODE:
+- `action_input` for `execute_python` is a JSON object `{"code": "..."}`, not a plain string.
+- Keep code under ~600 chars to avoid JSON truncation: short variable names, one-liners, comprehensions, pandas one-liners.
+- Always `print()` the final result.
 
-PYTHON CODE RULES:
+ERROR RECOVERY:
+- "action_input must be a JSON object" → wrap the value as `{"code": "..."}`.
+- "Model response must contain only one JSON block" → code too long, rewrite compactly.
+- "file is not a database" → use `execute_python` with pandas/csv.
+- After any error, your next action must change at least one parameter or switch tools.
 
-- action_input for execute_python MUST be a JSON object: `{"code": "..."}`.
-  - WRONG: `"action_input": "import os\nprint(...)"` (plain string)
-  - RIGHT:  `"action_input": {"code": "import os\nprint(...)"}`
-- Keep code as SHORT as possible. Long code strings cause JSON truncation.
-  - Use short variable names (e.g., `df`, `ev`, `ex`, `bd`).
-  - Use one-liner constructs: `with open(f) as h: data = json.load(h)`.
-  - Prefer `setdefault`, list/dict comprehensions, and pandas one-liners over multi-line for-loops.
-  - Target under 600 characters. If your code exceeds this, rewrite more compactly.
-- Always print() the final result — the tool returns stdout as `output`.
-- Check column dtypes before filtering: use `print(df.dtypes)` first if unsure.
- 
-FORMAT RULES:
-
-1. Always return exactly one JSON object with keys `thought`, `action`, and `action_input`.
-2. Always wrap that JSON object in exactly one fenced code block that starts with ```json and ends with ```.
-3. Do not output any text before or after the fenced JSON block.
-4. Use tools to inspect and gather information systematically.
-5. Base your answer only on information you can observe through the provided tools.
-6. The task is complete only when you call the `answer` tool.
-7. The `answer` tool must receive a table with `columns` and `rows`.
-8. If the submitted answer would have empty rows but there is still time and step budget left, keep reasoning and try again instead of finalizing immediately.
-
-Keep reasoning structured: first understand, then plan, then execute.
+OUTPUT FORMAT:
+- Return exactly one JSON object with keys `thought`, `action`, `action_input`, wrapped in a single ```json fenced block. No text before or after.
+- The task is complete only when you call `answer` with `columns` and `rows`. If the answer would have empty rows but step budget remains, keep reasoning instead of finalizing.
 """.strip()
 
 RESPONSE_EXAMPLES = """
 Example — initial planning step:
 ```json
-{"thought":"I need to gather data about the task. Let me start by exploring the context.","plan":"1. List all files\n2. Read knowledge.md fully (increase max_chars if truncated)\n3. Inspect every relevant file found\n4. Compute and verify answer","action":"list_context","action_input":{"max_depth":4}}
-```
- 
-Example — knowledge.md was truncated, re-reading with larger max_chars:
-```json
-{"thought":"The previous read_doc returned truncated=true. I must re-read with a larger max_chars to get the full schema information.","action":"read_doc","action_input":{"path":"knowledge.md","max_chars":16000}}
-```
- 
-Example — empty result from one file, trying another file before giving up:
-```json
-{"thought":"transactions_1k.db returned 0 rows for June 2013. I noticed json/transactions_1k.db also exists and has not been queried yet. I must check it before concluding no data exists.","action":"inspect_sqlite_schema","action_input":{"path":"json/transactions_1k.db"}}
-```
- 
-Example — fixing a JSON truncation error by compressing code:
-```json
-{"thought":"The previous response caused a 'multiple JSON objects' error because my code was too long. I will rewrite the same logic more compactly using short variable names and one-liners.","action":"execute_python","action_input":{"code":"import json,csv\nwith open('json/event.json') as f: ev=json.load(f)['records']\nwith open('json/expense.json') as f: ex=json.load(f)['records']\nwith open('csv/budget.csv') as f: bd=list(csv.DictReader(f))\nb2e={b['budget_id']:b['link_to_event'] for b in bd}\ncosts={}\nfor e in ex:\n  eid=b2e.get(e.get('link_to_budget'))\n  if eid: costs[eid]=costs.get(eid,0)+float(e['cost'])\nprint(costs)"}}
-```
- 
-Example — fixing wrong action_input format:
-```json
-{"thought":"Previous step failed with 'action_input must be a JSON object' because I passed a plain string. I must wrap the code in a dict with key 'code'.","action":"execute_python","action_input":{"code":"import os\nprint(sorted(os.listdir('.')))"}}
-```
- 
-Example — final answer with exact dataset column names:
-```json
-{"thought":"I have computed all necessary data and verified the column names against the dataset.","action":"answer","action_input":{"columns":["average_long_shots"],"rows":[["63.5"]]}}
-```
- 
-Example — question asks for full names but dataset has first_name/last_name:
-```json
-{"thought":"The context has columns first_name and last_name; I'll return those instead of inventing full_name.","action":"answer","action_input":{"columns":["first_name","last_name"],"rows":[["Trent","Smith"],["Tyler","Hewitt"]]}}
-```
- 
-Example — aggregate column naming:
-```json
-{"thought":"I will compute the total cost per member using the cost column in T2.","action":"answer","action_input":{"columns":["first_name","last_name","SUM(T2.cost)"],"rows":[["Sacha","Harrison","866.25"]]}}
-```
- 
-Example — question asks WHICH event has lowest cost (return only identifier, not the cost):
-```json
-{"thought":"The question asks for the event with the lowest cost, so I output only event_name, not the cost value.","action":"answer","action_input":{"columns":["event_name"],"rows":[["September Speaker"]]}}
+{"thought":"I need to gather data about the task. Let me start by exploring the context.","plan":"1. List files\n2. Read knowledge guide\n3. Inspect relevant files\n4. Compute and verify","action":"list_context","action_input":{"max_depth":4}}
 ```
 
-Example — observation-first thought (pkl file with unknown values):
+Example — observation reveals a schema mismatch (revise the plan):
 ```json
-{"thought":"OBSERVED: patients.pkl is a dict with 97 patient ID keys. Values are <class 'datetime.datetime'>. I have NOT yet printed an actual value to confirm what the dates represent. UNACTIONED: actual datetime values not yet seen. NEXT: print list(data.items())[:3] to verify.","action":"execute_python","action_input":{"code":"import pickle\nwith open('patients.pkl','rb') as f: d=pickle.load(f)\nprint(list(d.items())[:3])"}}
+{"thought":"[Expected] cards table has a 'Format' column per knowledge.md. [Got] PRAGMA shows no 'Format' column. [Revised] Trust the actual schema; the format info must live in another column (e.g., layout) or another file — inspect distinct values next.","action":"execute_context_sql","action_input":{"path":"db/cards.db","sql":"SELECT DISTINCT layout FROM cards LIMIT 50"}}
 ```
 
-Example — observation-first thought (file listing with unqueried file):
+Example — final answer with PRE-ANSWER VERIFICATION quoting the question:
 ```json
-{"thought":"OBSERVED: list_context returned 4 files: csv/yearmonth.csv, db/transactions_1k.db, json/gasstations.json, json/transactions_1k.db. UNACTIONED: json/transactions_1k.db has not been queried — only db/transactions_1k.db was inspected. NEXT: inspect json/transactions_1k.db schema before concluding no June 2013 data exists.","action":"inspect_sqlite_schema","action_input":{"path":"json/transactions_1k.db"}}
+{"thought":"PRE-ANSWER VERIFICATION on 'average weight of all female superheroes': [1]numeric value, not an ID. [2]'average'→AVG at hero grain. [3]no extra qualifier. [4]single rolled-up row. [5]one column. Computed AVG=60.78 from 200 female heroes.","action":"answer","action_input":{"columns":["AVG(weight_kg)"],"rows":[["60.78"]]}}
 ```
 
-Example — observation-first thought (0 rows returned):
+Example — "full name" with separate dataset columns (never concatenate):
 ```json
-{"thought":"OBSERVED: query returned 0 rows for Date >= '2013-06-01'. UNACTIONED: I checked db/transactions_1k.db but not json/transactions_1k.db. Also, date format may differ. NEXT: check date format first with SELECT DISTINCT Date FROM transactions_1k LIMIT 5.","action":"execute_context_sql","action_input":{"path":"db/transactions_1k.db","sql":"SELECT DISTINCT Date FROM transactions_1k LIMIT 5"}}
+{"thought":"PRE-ANSWER VERIFICATION on 'full name and total cost member incurred': [1]text not Id. [2]SUM at member grain. [3]filter by member_id. [4]single row. [5]'full name' = first_name + last_name as TWO columns since the dataset stores them separately.","action":"answer","action_input":{"columns":["first_name","last_name","SUM(T2.cost)"],"rows":[["Sacha","Harrison","866.25"]]}}
+```
+
+Example — "which X has lowest Y" → only the identifier, no Y column; include all ties:
+```json
+{"thought":"PRE-ANSWER VERIFICATION on 'which event has the lowest cost': [1]event identifier, not cost. [4]two events tie at the minimum, include both. [5]one column only — no helper SUM(cost).","action":"answer","action_input":{"columns":["event_name"],"rows":[["September Speaker"],["October Speaker"]]}}
+```
+
+Example — "how many times X more than Y" → return the ratio as a bare number, no `%`/unit:
+```json
+{"thought":"PRE-ANSWER VERIFICATION on 'how many times faster was the champion than the last place': [1]numeric. [3]ratio question → return (last - champion) / last as a bare decimal, NOT a count and NOT with a '%' suffix.","action":"answer","action_input":{"columns":["percentage_faster"],"rows":[["0.0051"]]}}
 ```
 """.strip()
 
@@ -227,18 +166,7 @@ def build_system_prompt(
 def build_task_prompt(task: PublicTask) -> str:
     return (
         f"Question: {task.question}\n"
-        "--- Execution checklist ---\n"
-        "1. Call list_context first. Note every file path — you must read all of them.\n"
-        "2. If knowledge.md or any doc returns truncated=true, re-read it with larger max_chars.\n"
-        "3. If a query returns 0 rows, verify the data format and check all relevant files before concluding empty.\n"
-        "4. Never repeat an identical (tool, parameters) call — change something.\n"
-        "5. Keep execute_python code under 600 characters. Use short variable names.\n"
-        "6. When ready, call the `answer` tool with exact dataset column names.\n"
-        "---\n"
         "All tool file paths are relative to the task context directory. "
-        "Prefer dataset column names in your final table. "
-        "Use only the columns the question actually requires. "
-        "Name aggregates using SQL-like expressions (e.g., SUM(T2.cost))."
         "When you have the final table, call the `answer` tool."
     )
 
