@@ -1,0 +1,440 @@
+{
+  "task_id": "task_75",
+  "answer": {
+    "columns": [
+      "surname"
+    ],
+    "rows": [
+      [
+        "Räikkönen"
+      ]
+    ]
+  },
+  "steps": [
+    {
+      "step_index": 1,
+      "thought": "I need to find information about lap times for race number 19, specifically in the second qualifying period. Let me start by exploring the context directory to understand the data structure.",
+      "action": "list_context",
+      "action_input": {
+        "max_depth": 4
+      },
+      "raw_response": "\n\n```json\n{\"thought\":\"I need to find information about lap times for race number 19, specifically in the second qualifying period. Let me start by exploring the context directory to understand the data structure.\",\"plan\":\"1. List available files in context\\n2. Inspect relevant files to understand the schema\\n3. Find data about qualifying periods and lap times\\n4. Identify the driver with best lap time in race 19, second qualifying period\\n5. Extract the surname\",\"action\":\"list_context\",\"action_input\":{\"max_depth\":4}}\n```",
+      "observation": {
+        "ok": true,
+        "tool": "list_context",
+        "content": {
+          "root": "/Users/hyeonseungkim/workspace/kddcup2026-blueshabu/data/public/input/task_75/context",
+          "entries": [
+            {
+              "path": "csv",
+              "kind": "dir",
+              "size": null
+            },
+            {
+              "path": "csv/qualifying.csv",
+              "kind": "file",
+              "size": 277359
+            },
+            {
+              "path": "json",
+              "kind": "dir",
+              "size": null
+            },
+            {
+              "path": "json/drivers.json",
+              "kind": "file",
+              "size": 237752
+            },
+            {
+              "path": "knowledge.md",
+              "kind": "file",
+              "size": 6067
+            }
+          ]
+        }
+      },
+      "ok": true,
+      "plan": "1. List available files in context\n2. Inspect relevant files to understand the schema\n3. Find data about qualifying periods and lap times\n4. Identify the driver with best lap time in race 19, second qualifying period\n5. Extract the surname"
+    },
+    {
+      "step_index": 2,
+      "thought": "I can see the context contains csv/qualifying.csv, json/drivers.json, and knowledge.md. Let me first read the knowledge.md file to understand the schema and data structure.",
+      "action": "read_doc",
+      "action_input": {
+        "path": "knowledge.md",
+        "max_chars": 50000
+      },
+      "raw_response": "\n\n```json\n{\"thought\":\"I can see the context contains csv/qualifying.csv, json/drivers.json, and knowledge.md. Let me first read the knowledge.md file to understand the schema and data structure.\",\"plan\":\"1. Read knowledge.md to understand the schema\\n2. Read qualifying.csv to understand lap time structure\\n3. Read drivers.json to understand driver data structure\\n4. Query data to find race 19, second qualifying period best lap time driver\",\"action\":\"read_doc\",\"action_input\":{\"path\":\"knowledge.md\",\"max_chars\":50000}}\n```",
+      "observation": {
+        "ok": true,
+        "tool": "read_doc",
+        "content": {
+          "path": "knowledge.md",
+          "preview": "# Enterprise Data Governance Knowledge Guide for Database: Formula_1\n\n## 1. Introduction\nThis guide serves as a comprehensive semantic layer for the Formula_1 database, providing authoritative definitions, metric formulations, and governance standards. It is designed to ensure consistent data interpretation and usage across the enterprise, supporting strategic decision-making and operational efficiency.\n\n## 2. Core Entities & Fields\n\n### Business Entities\n- **Drivers**: Individuals participating in races, identified by `driverId`. Key attributes include `forename`, `surname`, `date of birth`, and `nationality`.\n- **Races**: Competitive events, identified by `raceId`. Attributes include `year`, `round`, `name`, and `date`.\n- **Circuits**: Locations where races are held, identified by `circuitId`. Attributes include `name`, `location`, `country`, and geographical coordinates (`latitude`, `longitude`).\n- **Constructors**: Teams responsible for car design and manufacturing, identified by `constructorId`. Attributes include `name`, `nationality`, and `url`.\n\n### Key Attributes\n- **driverRef**: A unique reference name for drivers, used for identification in various contexts.\n- **raceId**: A unique identifier for races, crucial for linking race-related data across tables.\n- **q1, q2, q3**: Qualifying period results, representing lap times in different qualifying sessions.\n- **fastestLapTime**: The quickest lap time recorded during a race, used to assess driver performance.\n- **points**: Scoring metric for drivers and constructors, reflecting performance in races.\n- **rank**: The driver's ranking within a race based on `fastestLapTime`; rank 1 indicates the driver who recorded the quickest lap time.\n\n## 3. Metric Definitions\n\n### Key Performance Indicators (KPIs)\n- **Driver Performance Index**: Calculated as the average of `points` scored by a driver across all races. Formula: `AVG(points)`.\n- **Constructor Success Rate**: Percentage of races where a constructor finishes in the top 3 positions. Formula: `DIVIDE(COUNT(raceId WHERE position <= 3), COUNT(raceId)) * 100`.\n- **Fastest Lap Efficiency**: Ratio of fastest lap times to total laps completed. Formula: `DIVIDE(SUM(fastestLapTime), SUM(laps))`.\n- **Race Completion Rate**: Percentage of races completed by drivers without disqualification. Formula: `DIVIDE(COUNT(raceId WHERE statusId != 2), COUNT(raceId)) * 100`.\n- **Qualifying Improvement Rate**: Change in qualifying times across sessions. Formula: `SUBTRACT(q3, q1)`.\n\n## 4. Constraints & Conventions\n\n### Filtering Criteria\n- **Temporal Boundaries**: Data is typically analyzed within calendar years, with fiscal year adjustments as needed.\n- **Currency Formatting**: Points and other numerical metrics are presented in integer or real formats, with no currency conversion required.\n- **Unit Conversion**: Time metrics are standardized to 'MM:SS.mmm' format for consistency.\n\n### Common Conventions\n- **Driver Identification**: Use `driverId` for unique identification; `driverRef` for reference in reports.\n- **Race Identification**: Use `raceId` for linking race data; `name` for descriptive purposes.\n\n## 5. Exemplar Use Cases\n\n### Example 1: Driver Elimination in Qualifying\n- **Metric**: Identify drivers eliminated in the first qualifying period for a specific race.\n- **Explanation**: For race number 20, list the reference names of drivers with the highest `q1` times, indicating elimination.\n- **SQL**: `SELECT T2.driverRef FROM qualifying AS T1 INNER JOIN drivers AS T2 ON T2.driverId = T1.driverId WHERE T1.raceId = 20 ORDER BY T1.q1 DESC LIMIT 5`\n\n### Example 2: Best Lap Time Analysis\n- **Metric**: Determine the driver with the best lap time in the second qualifying period.\n- **Explanation**: For race number 19, identify the driver with the minimum `q2` time.\n- **SQL**: `SELECT T2.surname FROM qualifying AS T1 INNER JOIN drivers AS T2 ON T2.driverId = T1.driverId WHERE T1.raceId = 19 ORDER BY T1.q2 ASC LIMIT 1`\n\n### Example 3: Circuit Location Identification\n- **Metric**: Retrieve geographical coordinates for specific Grand Prix events.\n- **Explanation**: For the Australian Grand Prix, extract latitude and longitude of the circuit.\n- **SQL**: `SELECT DISTINCT T1.lat, T1.lng FROM circuits AS T1 INNER JOIN races AS T2 ON T2.circuitID = T1.circuitId WHERE T2.name = 'Australian Grand Prix'`\n\n### Example 4: Driver Age Analysis\n- **Metric**: Identify the oldest driver who completed a specific race.\n- **Explanation**: For race number 592, find the driver with the earliest `dob` among those who finished the race.\n- **SQL**: `SELECT T1.forename, T1.surname FROM drivers AS T1 INNER JOIN results AS T2 ON T2.driverId = T1.driverId WHERE T2.raceId = 592 AND T2.time IS NOT NULL AND T1.dob IS NOT NULL ORDER BY T1.dob ASC LIMIT 1`\n\n### Example 5: Constructor Points Calculation\n- **Metric**: Calculate the maximum points scored by a constructor in a race.\n- **Explanation**: Determine the highest `points` value from `constructorResults` for a given race.\n- **SQL**: `SELECT MAX(points) FROM constructorResults WHERE raceId = [specific_raceId]`\n\n## 6. Ambiguity Resolution\n\n### Potentially Ambiguous Fields\n### Potentially Ambiguous Fields\n- **position vs. positionOrder**: Use `positionOrder` for final race rankings; `position` for grid or qualifying positions.\n- **time vs. milliseconds**: Use `milliseconds` for precise calculations; `time` for formatted display.\n- **driverRef vs. driverId**: Use `driverId` for unique identification; `driverRef` for reference in reports.\n- **rank vs. positionOrder**: Use `positionOrder` for final race finishing order; `rank` represents the driver's ranking based on `fastestLapTime` within a race, not the overall finishing position.\n\n### Recommended Usage\n- Prioritize `driverId` and `raceId` for linking data across tables.\n- Use `fastestLapTime` for performance metrics; `fastestLapSpeed` for speed analysis.\n\nThis guide ensures consistent and accurate data usage across the Formula_1 database, supporting enterprise-wide data governance and strategic insights.",
+          "truncated": false
+        }
+      },
+      "ok": true,
+      "plan": "1. Read knowledge.md to understand the schema\n2. Read qualifying.csv to understand lap time structure\n3. Read drivers.json to understand driver data structure\n4. Query data to find race 19, second qualifying period best lap time driver"
+    },
+    {
+      "step_index": 3,
+      "thought": "The knowledge.md file contains a perfect example for this question. It shows that for race 19 and second qualifying period (q2), I need to find the driver with the minimum q2 time. The SQL example shows selecting T2.surname where T1.raceId = 19 ordered by T1.q2 ASC LIMIT 1. Let me now inspect the qualifying.csv to verify the data structure and then run the query.",
+      "action": "read_csv",
+      "action_input": {
+        "path": "csv/qualifying.csv",
+        "max_rows": 20
+      },
+      "raw_response": "\n\n```json\n{\"thought\":\"The knowledge.md file contains a perfect example for this question. It shows that for race 19 and second qualifying period (q2), I need to find the driver with the minimum q2 time. The SQL example shows selecting T2.surname where T1.raceId = 19 ordered by T1.q2 ASC LIMIT 1. Let me now inspect the qualifying.csv to verify the data structure and then run the query.\",\"plan\":\"1. Read qualifying.csv to understand the structure\\n2. Run SQL query to find driver surname with best (minimum) q2 lap time for raceId 19\\n3. Submit answer\",\"action\":\"read_csv\",\"action_input\":{\"path\":\"csv/qualifying.csv\",\"max_rows\":20}}\n```",
+      "observation": {
+        "ok": true,
+        "tool": "read_csv",
+        "content": {
+          "path": "csv/qualifying.csv",
+          "columns": [
+            "qualifyId",
+            "raceId",
+            "driverId",
+            "constructorId",
+            "number",
+            "position",
+            "q1",
+            "q2",
+            "q3"
+          ],
+          "rows": [
+            [
+              "1",
+              "18",
+              "1",
+              "1",
+              "22",
+              "1",
+              "1:26.572",
+              "1:25.187",
+              "1:26.714"
+            ],
+            [
+              "2",
+              "18",
+              "9",
+              "2",
+              "4",
+              "2",
+              "1:26.103",
+              "1:25.315",
+              "1:26.869"
+            ],
+            [
+              "3",
+              "18",
+              "5",
+              "1",
+              "23",
+              "3",
+              "1:25.664",
+              "1:25.452",
+              "1:27.079"
+            ],
+            [
+              "4",
+              "18",
+              "13",
+              "6",
+              "2",
+              "4",
+              "1:25.994",
+              "1:25.691",
+              "1:27.178"
+            ],
+            [
+              "5",
+              "18",
+              "2",
+              "2",
+              "3",
+              "5",
+              "1:25.960",
+              "1:25.518",
+              "1:27.236"
+            ],
+            [
+              "6",
+              "18",
+              "15",
+              "7",
+              "11",
+              "6",
+              "1:26.427",
+              "1:26.101",
+              "1:28.527"
+            ],
+            [
+              "7",
+              "18",
+              "3",
+              "3",
+              "7",
+              "7",
+              "1:26.295",
+              "1:26.059",
+              "1:28.687"
+            ],
+            [
+              "8",
+              "18",
+              "14",
+              "9",
+              "9",
+              "8",
+              "1:26.381",
+              "1:26.063",
+              "1:29.041"
+            ],
+            [
+              "9",
+              "18",
+              "10",
+              "7",
+              "12",
+              "9",
+              "1:26.919",
+              "1:26.164",
+              "1:29.593"
+            ],
+            [
+              "10",
+              "18",
+              "20",
+              "5",
+              "15",
+              "10",
+              "1:26.702",
+              "1:25.842",
+              ""
+            ],
+            [
+              "11",
+              "18",
+              "22",
+              "11",
+              "17",
+              "11",
+              "1:26.369",
+              "1:26.173",
+              ""
+            ],
+            [
+              "12",
+              "18",
+              "4",
+              "4",
+              "5",
+              "12",
+              "1:26.907",
+              "1:26.188",
+              ""
+            ],
+            [
+              "13",
+              "18",
+              "18",
+              "11",
+              "16",
+              "13",
+              "1:26.712",
+              "1:26.259",
+              ""
+            ],
+            [
+              "14",
+              "18",
+              "6",
+              "3",
+              "8",
+              "14",
+              "1:26.891",
+              "1:26.413",
+              ""
+            ],
+            [
+              "15",
+              "18",
+              "17",
+              "9",
+              "10",
+              "15",
+              "1:26.914",
+              "",
+              ""
+            ],
+            [
+              "16",
+              "18",
+              "8",
+              "6",
+              "1",
+              "16",
+              "1:26.140",
+              "",
+              ""
+            ],
+            [
+              "17",
+              "18",
+              "21",
+              "10",
+              "21",
+              "17",
+              "1:27.207",
+              "",
+              ""
+            ],
+            [
+              "18",
+              "18",
+              "7",
+              "5",
+              "14",
+              "18",
+              "1:27.446",
+              "",
+              ""
+            ],
+            [
+              "19",
+              "18",
+              "16",
+              "10",
+              "20",
+              "19",
+              "1:27.859",
+              "",
+              ""
+            ],
+            [
+              "20",
+              "18",
+              "11",
+              "8",
+              "18",
+              "20",
+              "1:28.208",
+              "",
+              ""
+            ]
+          ],
+          "row_count": 7397
+        }
+      },
+      "ok": true,
+      "plan": "1. Read qualifying.csv to understand the structure\n2. Run SQL query to find driver surname with best (minimum) q2 lap time for raceId 19\n3. Submit answer"
+    },
+    {
+      "step_index": 4,
+      "thought": "I can see the qualifying.csv structure. The q2 column contains lap times in MM:SS.mmm format. I need to find the driver with the minimum q2 time for raceId=19. Let me check the drivers.json to understand the driver surname column, then run the SQL query.",
+      "action": "read_json",
+      "action_input": {
+        "path": "json/drivers.json",
+        "max_chars": 50000
+      },
+      "raw_response": "\n\n```json\n{\"thought\":\"I can see the qualifying.csv structure. The q2 column contains lap times in MM:SS.mmm format. I need to find the driver with the minimum q2 time for raceId=19. Let me check the drivers.json to understand the driver surname column, then run the SQL query.\",\"plan\":\"1. Check drivers.json structure for surname column\\n2. Run SQL query to join qualifying with drivers and find surname with minimum q2 for raceId=19\\n3. Submit answer\",\"action\":\"read_json\",\"action_input\":{\"path\":\"json/drivers.json\",\"max_chars\":50000}}\n```",
+      "observation": {
+        "ok": true,
+        "tool": "read_json",
+        "content": {
+          "path": "json/drivers.json",
+          "preview": "{\n  \"table\": \"drivers\",\n  \"records\": [\n    {\n      \"driverId\": 1,\n      \"driverRef\": \"hamilton\",\n      \"number\": 44,\n      \"code\": \"HAM\",\n      \"forename\": \"Lewis\",\n      \"surname\": \"Hamilton\",\n      \"dob\": \"1985-01-07\",\n      \"nationality\": \"British\",\n      \"url\": \"http://en.wikipedia.org/wiki/Lewis_Hamilton\"\n    },\n    {\n      \"driverId\": 2,\n      \"driverRef\": \"heidfeld\",\n      \"number\": null,\n      \"code\": \"HEI\",\n      \"forename\": \"Nick\",\n      \"surname\": \"Heidfeld\",\n      \"dob\": \"1977-05-10\",\n      \"nationality\": \"German\",\n      \"url\": \"http://en.wikipedia.org/wiki/Nick_Heidfeld\"\n    },\n    {\n      \"driverId\": 3,\n      \"driverRef\": \"rosberg\",\n      \"number\": 6,\n      \"code\": \"ROS\",\n      \"forename\": \"Nico\",\n      \"surname\": \"Rosberg\",\n      \"dob\": \"1985-06-27\",\n      \"nationality\": \"German\",\n      \"url\": \"http://en.wikipedia.org/wiki/Nico_Rosberg\"\n    },\n    {\n      \"driverId\": 4,\n      \"driverRef\": \"alonso\",\n      \"number\": 14,\n      \"code\": \"ALO\",\n      \"forename\": \"Fernando\",\n      \"surname\": \"Alonso\",\n      \"dob\": \"1981-07-29\",\n      \"nationality\": \"Spanish\",\n      \"url\": \"http://en.wikipedia.org/wiki/Fernando_Alonso\"\n    },\n    {\n      \"driverId\": 5,\n      \"driverRef\": \"kovalainen\",\n      \"number\": null,\n      \"code\": \"KOV\",\n      \"forename\": \"Heikki\",\n      \"surname\": \"Kovalainen\",\n      \"dob\": \"1981-10-19\",\n      \"nationality\": \"Finnish\",\n      \"url\": \"http://en.wikipedia.org/wiki/Heikki_Kovalainen\"\n    },\n    {\n      \"driverId\": 6,\n      \"driverRef\": \"nakajima\",\n      \"number\": null,\n      \"code\": \"NAK\",\n      \"forename\": \"Kazuki\",\n      \"surname\": \"Nakajima\",\n      \"dob\": \"1985-01-11\",\n      \"nationality\": \"Japanese\",\n      \"url\": \"http://en.wikipedia.org/wiki/Kazuki_Nakajima\"\n    },\n    {\n      \"driverId\": 7,\n      \"driverRef\": \"bourdais\",\n      \"number\": null,\n      \"code\": \"BOU\",\n      \"forename\": \"Sébastien\",\n      \"surname\": \"Bourdais\",\n      \"dob\": \"1979-02-28\",\n      \"nationality\": \"French\",\n      \"url\": \"http://en.wikipedia.org/wiki/S%C3%A9bastien_Bourdais\"\n    },\n    {\n      \"driverId\": 8,\n      \"driverRef\": \"raikkonen\",\n      \"number\": 7,\n      \"code\": \"RAI\",\n      \"forename\": \"Kimi\",\n      \"surname\": \"Räikkönen\",\n      \"dob\": \"1979-10-17\",\n      \"nationality\": \"Finnish\",\n      \"url\": \"http://en.wikipedia.org/wiki/Kimi_R%C3%A4ikk%C3%B6nen\"\n    },\n    {\n      \"driverId\": 9,\n      \"driverRef\": \"kubica\",\n      \"number\": null,\n      \"code\": \"KUB\",\n      \"forename\": \"Robert\",\n      \"surname\": \"Kubica\",\n      \"dob\": \"1984-12-07\",\n      \"nationality\": \"Polish\",\n      \"url\": \"http://en.wikipedia.org/wiki/Robert_Kubica\"\n    },\n    {\n      \"driverId\": 10,\n      \"driverRef\": \"glock\",\n      \"number\": null,\n      \"code\": \"GLO\",\n      \"forename\": \"Timo\",\n      \"surname\": \"Glock\",\n      \"dob\": \"1982-03-18\",\n      \"nationality\": \"German\",\n      \"url\": \"http://en.wikipedia.org/wiki/Timo_Glock\"\n    },\n    {\n      \"driverId\": 11,\n      \"driverRef\": \"sato\",\n      \"number\": null,\n      \"code\": \"SAT\",\n      \"forename\": \"Takuma\",\n      \"surname\": \"Sato\",\n      \"dob\": \"1977-01-28\",\n      \"nationality\": \"Japanese\",\n      \"url\": \"http://en.wikipedia.org/wiki/Takuma_Sato\"\n    },\n    {\n      \"driverId\": 12,\n      \"driverRef\": \"piquet_jr\",\n      \"number\": null,\n      \"code\": \"PIQ\",\n      \"forename\": \"Nelson\",\n      \"surname\": \"Piquet Jr.\",\n      \"dob\": \"1985-07-25\",\n      \"nationality\": \"Brazilian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Nelson_Piquet,_Jr.\"\n    },\n    {\n      \"driverId\": 13,\n      \"driverRef\": \"massa\",\n      \"number\": 19,\n      \"code\": \"MAS\",\n      \"forename\": \"Felipe\",\n      \"surname\": \"Massa\",\n      \"dob\": \"1981-04-25\",\n      \"nationality\": \"Brazilian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Felipe_Massa\"\n    },\n    {\n      \"driverId\": 14,\n      \"driverRef\": \"coulthard\",\n      \"number\": null,\n      \"code\": \"COU\",\n      \"forename\": \"David\",\n      \"surname\": \"Coulthard\",\n      \"dob\": \"1971-03-27\",\n      \"nationality\": \"British\",\n      \"url\": \"http://en.wikipedia.org/wiki/David_Coulthard\"\n    },\n    {\n      \"driverId\": 15,\n      \"driverRef\": \"trulli\",\n      \"number\": null,\n      \"code\": \"TRU\",\n      \"forename\": \"Jarno\",\n      \"surname\": \"Trulli\",\n      \"dob\": \"1974-07-13\",\n      \"nationality\": \"Italian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Jarno_Trulli\"\n    },\n    {\n      \"driverId\": 16,\n      \"driverRef\": \"sutil\",\n      \"number\": 99,\n      \"code\": \"SUT\",\n      \"forename\": \"Adrian\",\n      \"surname\": \"Sutil\",\n      \"dob\": \"1983-01-11\",\n      \"nationality\": \"German\",\n      \"url\": \"http://en.wikipedia.org/wiki/Adrian_Sutil\"\n    },\n    {\n      \"driverId\": 17,\n      \"driverRef\": \"webber\",\n      \"number\": null,\n      \"code\": \"WEB\",\n      \"forename\": \"Mark\",\n      \"surname\": \"Webber\",\n      \"dob\": \"1976-08-27\",\n      \"nationality\": \"Australian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Mark_Webber\"\n    },\n    {\n      \"driverId\": 18,\n      \"driverRef\": \"button\",\n      \"number\": 22,\n      \"code\": \"BUT\",\n      \"forename\": \"Jenson\",\n      \"surname\": \"Button\",\n      \"dob\": \"1980-01-19\",\n      \"nationality\": \"British\",\n      \"url\": \"http://en.wikipedia.org/wiki/Jenson_Button\"\n    },\n    {\n      \"driverId\": 19,\n      \"driverRef\": \"davidson\",\n      \"number\": null,\n      \"code\": \"DAV\",\n      \"forename\": \"Anthony\",\n      \"surname\": \"Davidson\",\n      \"dob\": \"1979-04-18\",\n      \"nationality\": \"British\",\n      \"url\": \"http://en.wikipedia.org/wiki/Anthony_Davidson\"\n    },\n    {\n      \"driverId\": 20,\n      \"driverRef\": \"vettel\",\n      \"number\": 5,\n      \"code\": \"VET\",\n      \"forename\": \"Sebastian\",\n      \"surname\": \"Vettel\",\n      \"dob\": \"1987-07-03\",\n      \"nationality\": \"German\",\n      \"url\": \"http://en.wikipedia.org/wiki/Sebastian_Vettel\"\n    },\n    {\n      \"driverId\": 21,\n      \"driverRef\": \"fisichella\",\n      \"number\": null,\n      \"code\": \"FIS\",\n      \"forename\": \"Giancarlo\",\n      \"surname\": \"Fisichella\",\n      \"dob\": \"1973-01-14\",\n      \"nationality\": \"Italian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Giancarlo_Fisichella\"\n    },\n    {\n      \"driverId\": 22,\n      \"driverRef\": \"barrichello\",\n      \"number\": null,\n      \"code\": \"BAR\",\n      \"forename\": \"Rubens\",\n      \"surname\": \"Barrichello\",\n      \"dob\": \"1972-05-23\",\n      \"nationality\": \"Brazilian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Rubens_Barrichello\"\n    },\n    {\n      \"driverId\": 23,\n      \"driverRef\": \"ralf_schumacher\",\n      \"number\": null,\n      \"code\": \"SCH\",\n      \"forename\": \"Ralf\",\n      \"surname\": \"Schumacher\",\n      \"dob\": \"1975-06-30\",\n      \"nationality\": \"German\",\n      \"url\": \"http://en.wikipedia.org/wiki/Ralf_Schumacher\"\n    },\n    {\n      \"driverId\": 24,\n      \"driverRef\": \"liuzzi\",\n      \"number\": null,\n      \"code\": \"LIU\",\n      \"forename\": \"Vitantonio\",\n      \"surname\": \"Liuzzi\",\n      \"dob\": \"1980-08-06\",\n      \"nationality\": \"Italian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Vitantonio_Liuzzi\"\n    },\n    {\n      \"driverId\": 25,\n      \"driverRef\": \"wurz\",\n      \"number\": null,\n      \"code\": \"WUR\",\n      \"forename\": \"Alexander\",\n      \"surname\": \"Wurz\",\n      \"dob\": \"1974-02-15\",\n      \"nationality\": \"Austrian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Alexander_Wurz\"\n    },\n    {\n      \"driverId\": 26,\n      \"driverRef\": \"speed\",\n      \"number\": null,\n      \"code\": \"SPE\",\n      \"forename\": \"Scott\",\n      \"surname\": \"Speed\",\n      \"dob\": \"1983-01-24\",\n      \"nationality\": \"American\",\n      \"url\": \"http://en.wikipedia.org/wiki/Scott_Speed\"\n    },\n    {\n      \"driverId\": 27,\n      \"driverRef\": \"albers\",\n      \"number\": null,\n      \"code\": \"ALB\",\n      \"forename\": \"Christijan\",\n      \"surname\": \"Albers\",\n      \"dob\": \"1979-04-16\",\n      \"nationality\": \"Dutch\",\n      \"url\": \"http://en.wikipedia.org/wiki/Christijan_Albers\"\n    },\n    {\n      \"driverId\": 28,\n      \"driverRef\": \"markus_winkelhock\",\n      \"number\": null,\n      \"code\": \"WIN\",\n      \"forename\": \"Markus\",\n      \"surname\": \"Winkelhock\",\n      \"dob\": \"1980-06-13\",\n      \"nationality\": \"German\",\n      \"url\": \"http://en.wikipedia.org/wiki/Markus_Winkelhock\"\n    },\n    {\n      \"driverId\": 29,\n      \"driverRef\": \"yamamoto\",\n      \"number\": null,\n      \"code\": \"YAM\",\n      \"forename\": \"Sakon\",\n      \"surname\": \"Yamamoto\",\n      \"dob\": \"1982-07-09\",\n      \"nationality\": \"Japanese\",\n      \"url\": \"http://en.wikipedia.org/wiki/Sakon_Yamamoto\"\n    },\n    {\n      \"driverId\": 30,\n      \"driverRef\": \"michael_schumacher\",\n      \"number\": null,\n      \"code\": \"MSC\",\n      \"forename\": \"Michael\",\n      \"surname\": \"Schumacher\",\n      \"dob\": \"1969-01-03\",\n      \"nationality\": \"German\",\n      \"url\": \"http://en.wikipedia.org/wiki/Michael_Schumacher\"\n    },\n    {\n      \"driverId\": 31,\n      \"driverRef\": \"montoya\",\n      \"number\": null,\n      \"code\": \"MON\",\n      \"forename\": \"Juan\",\n      \"surname\": \"Pablo Montoya\",\n      \"dob\": \"1975-09-20\",\n      \"nationality\": \"Colombian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Juan_Pablo_Montoya\"\n    },\n    {\n      \"driverId\": 32,\n      \"driverRef\": \"klien\",\n      \"number\": null,\n      \"code\": \"KLI\",\n      \"forename\": \"Christian\",\n      \"surname\": \"Klien\",\n      \"dob\": \"1983-02-07\",\n      \"nationality\": \"Austrian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Christian_Klien\"\n    },\n    {\n      \"driverId\": 33,\n      \"driverRef\": \"monteiro\",\n      \"number\": null,\n      \"code\": \"TMO\",\n      \"forename\": \"Tiago\",\n      \"surname\": \"Monteiro\",\n      \"dob\": \"1976-07-24\",\n      \"nationality\": \"Portuguese\",\n      \"url\": \"http://en.wikipedia.org/wiki/Tiago_Monteiro\"\n    },\n    {\n      \"driverId\": 34,\n      \"driverRef\": \"ide\",\n      \"number\": null,\n      \"code\": \"IDE\",\n      \"forename\": \"Yuji\",\n      \"surname\": \"Ide\",\n      \"dob\": \"1975-01-21\",\n      \"nationality\": \"Japanese\",\n      \"url\": \"http://en.wikipedia.org/wiki/Yuji_Ide\"\n    },\n    {\n      \"driverId\": 35,\n      \"driverRef\": \"villeneuve\",\n      \"number\": null,\n      \"code\": \"VIL\",\n      \"forename\": \"Jacques\",\n      \"surname\": \"Villeneuve\",\n      \"dob\": \"1971-04-09\",\n      \"nationality\": \"Canadian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Jacques_Villeneuve\"\n    },\n    {\n      \"driverId\": 36,\n      \"driverRef\": \"montagny\",\n      \"number\": null,\n      \"code\": \"FMO\",\n      \"forename\": \"Franck\",\n      \"surname\": \"Montagny\",\n      \"dob\": \"1978-01-05\",\n      \"nationality\": \"French\",\n      \"url\": \"http://en.wikipedia.org/wiki/Franck_Montagny\"\n    },\n    {\n      \"driverId\": 37,\n      \"driverRef\": \"rosa\",\n      \"number\": null,\n      \"code\": \"DLR\",\n      \"forename\": \"Pedro\",\n      \"surname\": \"de la Rosa\",\n      \"dob\": \"1971-02-24\",\n      \"nationality\": \"Spanish\",\n      \"url\": \"http://en.wikipedia.org/wiki/Pedro_de_la_Rosa\"\n    },\n    {\n      \"driverId\": 38,\n      \"driverRef\": \"doornbos\",\n      \"number\": null,\n      \"code\": \"DOO\",\n      \"forename\": \"Robert\",\n      \"surname\": \"Doornbos\",\n      \"dob\": \"1981-09-23\",\n      \"nationality\": \"Dutch\",\n      \"url\": \"http://en.wikipedia.org/wiki/Robert_Doornbos\"\n    },\n    {\n      \"driverId\": 39,\n      \"driverRef\": \"karthikeyan\",\n      \"number\": null,\n      \"code\": \"KAR\",\n      \"forename\": \"Narain\",\n      \"surname\": \"Karthikeyan\",\n      \"dob\": \"1977-01-14\",\n      \"nationality\": \"Indian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Narain_Karthikeyan\"\n    },\n    {\n      \"driverId\": 40,\n      \"driverRef\": \"friesacher\",\n      \"number\": null,\n      \"code\": \"FRI\",\n      \"forename\": \"Patrick\",\n      \"surname\": \"Friesacher\",\n      \"dob\": \"1980-09-26\",\n      \"nationality\": \"Austrian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Patrick_Friesacher\"\n    },\n    {\n      \"driverId\": 41,\n      \"driverRef\": \"zonta\",\n      \"number\": null,\n      \"code\": \"ZON\",\n      \"forename\": \"Ricardo\",\n      \"surname\": \"Zonta\",\n      \"dob\": \"1976-03-23\",\n      \"nationality\": \"Brazilian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Ricardo_Zonta\"\n    },\n    {\n      \"driverId\": 42,\n      \"driverRef\": \"pizzonia\",\n      \"number\": null,\n      \"code\": \"PIZ\",\n      \"forename\": \"Antônio\",\n      \"surname\": \"Pizzonia\",\n      \"dob\": \"1980-09-11\",\n      \"nationality\": \"Brazilian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Ant%C3%B4nio_Pizzonia\"\n    },\n    {\n      \"driverId\": 43,\n      \"driverRef\": \"matta\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Cristiano\",\n      \"surname\": \"da Matta\",\n      \"dob\": \"1973-09-19\",\n      \"nationality\": \"Brazilian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Cristiano_da_Matta\"\n    },\n    {\n      \"driverId\": 44,\n      \"driverRef\": \"panis\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Olivier\",\n      \"surname\": \"Panis\",\n      \"dob\": \"1966-09-02\",\n      \"nationality\": \"French\",\n      \"url\": \"http://en.wikipedia.org/wiki/Olivier_Panis\"\n    },\n    {\n      \"driverId\": 45,\n      \"driverRef\": \"pantano\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Giorgio\",\n      \"surname\": \"Pantano\",\n      \"dob\": \"1979-02-04\",\n      \"nationality\": \"Italian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Giorgio_Pantano\"\n    },\n    {\n      \"driverId\": 46,\n      \"driverRef\": \"bruni\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Gianmaria\",\n      \"surname\": \"Bruni\",\n      \"dob\": \"1981-05-30\",\n      \"nationality\": \"Italian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Gianmaria_Bruni\"\n    },\n    {\n      \"driverId\": 47,\n      \"driverRef\": \"baumgartner\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Zsolt\",\n      \"surname\": \"Baumgartner\",\n      \"dob\": \"1981-01-01\",\n      \"nationality\": \"Hungarian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Zsolt_Baumgartner\"\n    },\n    {\n      \"driverId\": 48,\n      \"driverRef\": \"gene\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Marc\",\n      \"surname\": \"Gené\",\n      \"dob\": \"1974-03-29\",\n      \"nationality\": \"Spanish\",\n      \"url\": \"http://en.wikipedia.org/wiki/Marc_Gen%C3%A9\"\n    },\n    {\n      \"driverId\": 49,\n      \"driverRef\": \"frentzen\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Heinz-Harald\",\n      \"surname\": \"Frentzen\",\n      \"dob\": \"1967-05-18\",\n      \"nationality\": \"German\",\n      \"url\": \"http://en.wikipedia.org/wiki/Heinz-Harald_Frentzen\"\n    },\n    {\n      \"driverId\": 50,\n      \"driverRef\": \"verstappen\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Jos\",\n      \"surname\": \"Verstappen\",\n      \"dob\": \"1972-03-04\",\n      \"nationality\": \"Dutch\",\n      \"url\": \"http://en.wikipedia.org/wiki/Jos_Verstappen\"\n    },\n    {\n      \"driverId\": 51,\n      \"driverRef\": \"wilson\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Justin\",\n      \"surname\": \"Wilson\",\n      \"dob\": \"1978-07-31\",\n      \"nationality\": \"British\",\n      \"url\": \"http://en.wikipedia.org/wiki/Justin_Wilson_(racing_driver)\"\n    },\n    {\n      \"driverId\": 52,\n      \"driverRef\": \"firman\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Ralph\",\n      \"surname\": \"Firman\",\n      \"dob\": \"1975-05-20\",\n      \"nationality\": \"Irish\",\n      \"url\": \"http://en.wikipedia.org/wiki/Ralph_Firman\"\n    },\n    {\n      \"driverId\": 53,\n      \"driverRef\": \"kiesa\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Nicolas\",\n      \"surname\": \"Kiesa\",\n      \"dob\": \"1978-03-03\",\n      \"nationality\": \"Danish\",\n      \"url\": \"http://en.wikipedia.org/wiki/Nicolas_Kiesa\"\n    },\n    {\n      \"driverId\": 54,\n      \"driverRef\": \"burti\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Luciano\",\n      \"surname\": \"Burti\",\n      \"dob\": \"1975-03-05\",\n      \"nationality\": \"Brazilian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Luciano_Burti\"\n    },\n    {\n      \"driverId\": 55,\n      \"driverRef\": \"alesi\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Jean\",\n      \"surname\": \"Alesi\",\n      \"dob\": \"1964-06-11\",\n      \"nationality\": \"French\",\n      \"url\": \"http://en.wikipedia.org/wiki/Jean_Alesi\"\n    },\n    {\n      \"driverId\": 56,\n      \"driverRef\": \"irvine\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Eddie\",\n      \"surname\": \"Irvine\",\n      \"dob\": \"1965-11-10\",\n      \"nationality\": \"British\",\n      \"url\": \"http://en.wikipedia.org/wiki/Eddie_Irvine\"\n    },\n    {\n      \"driverId\": 57,\n      \"driverRef\": \"hakkinen\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Mika\",\n      \"surname\": \"Häkkinen\",\n      \"dob\": \"1968-09-28\",\n      \"nationality\": \"Finnish\",\n      \"url\": \"http://en.wikipedia.org/wiki/Mika_H%C3%A4kkinen\"\n    },\n    {\n      \"driverId\": 58,\n      \"driverRef\": \"marques\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Tarso\",\n      \"surname\": \"Marques\",\n      \"dob\": \"1976-01-19\",\n      \"nationality\": \"Brazilian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Tarso_Marques\"\n    },\n    {\n      \"driverId\": 59,\n      \"driverRef\": \"bernoldi\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Enrique\",\n      \"surname\": \"Bernoldi\",\n      \"dob\": \"1978-10-19\",\n      \"nationality\": \"Brazilian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Enrique_Bernoldi\"\n    },\n    {\n      \"driverId\": 60,\n      \"driverRef\": \"mazzacane\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Gastón\",\n      \"surname\": \"Mazzacane\",\n      \"dob\": \"1975-05-08\",\n      \"nationality\": \"Argentine\",\n      \"url\": \"http://en.wikipedia.org/wiki/Gast%C3%B3n_Mazzacane\"\n    },\n    {\n      \"driverId\": 61,\n      \"driverRef\": \"enge\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Tomáš\",\n      \"surname\": \"Enge\",\n      \"dob\": \"1976-09-11\",\n      \"nationality\": \"Czech\",\n      \"url\": \"http://en.wikipedia.org/wiki/Tom%C3%A1%C5%A1_Enge\"\n    },\n    {\n      \"driverId\": 62,\n      \"driverRef\": \"yoong\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Alex\",\n      \"surname\": \"Yoong\",\n      \"dob\": \"1976-07-20\",\n      \"nationality\": \"Malaysian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Alex_Yoong\"\n    },\n    {\n      \"driverId\": 63,\n      \"driverRef\": \"salo\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Mika\",\n      \"surname\": \"Salo\",\n      \"dob\": \"1966-11-30\",\n      \"nationality\": \"Finnish\",\n      \"url\": \"http://en.wikipedia.org/wiki/Mika_Salo\"\n    },\n    {\n      \"driverId\": 64,\n      \"driverRef\": \"diniz\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Pedro\",\n      \"surname\": \"Diniz\",\n      \"dob\": \"1970-05-22\",\n      \"nationality\": \"Brazilian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Pedro_Diniz\"\n    },\n    {\n      \"driverId\": 65,\n      \"driverRef\": \"herbert\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Johnny\",\n      \"surname\": \"Herbert\",\n      \"dob\": \"1964-06-25\",\n      \"nationality\": \"British\",\n      \"url\": \"http://en.wikipedia.org/wiki/Johnny_Herbert\"\n    },\n    {\n      \"driverId\": 66,\n      \"driverRef\": \"mcnish\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Allan\",\n      \"surname\": \"McNish\",\n      \"dob\": \"1969-12-29\",\n      \"nationality\": \"British\",\n      \"url\": \"http://en.wikipedia.org/wiki/Allan_McNish\"\n    },\n    {\n      \"driverId\": 67,\n      \"driverRef\": \"buemi\",\n      \"number\": null,\n      \"code\": \"BUE\",\n      \"forename\": \"Sébastien\",\n      \"surname\": \"Buemi\",\n      \"dob\": \"1988-10-31\",\n      \"nationality\": \"Swiss\",\n      \"url\": \"http://en.wikipedia.org/wiki/S%C3%A9bastien_Buemi\"\n    },\n    {\n      \"driverId\": 68,\n      \"driverRef\": \"takagi\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Toranosuke\",\n      \"surname\": \"Takagi\",\n      \"dob\": \"1974-02-12\",\n      \"nationality\": \"Japanese\",\n      \"url\": \"http://en.wikipedia.org/wiki/Toranosuke_Takagi\"\n    },\n    {\n      \"driverId\": 69,\n      \"driverRef\": \"badoer\",\n      \"number\": null,\n      \"code\": \"BAD\",\n      \"forename\": \"Luca\",\n      \"surname\": \"Badoer\",\n      \"dob\": \"1971-01-25\",\n      \"nationality\": \"Italian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Luca_Badoer\"\n    },\n    {\n      \"driverId\": 70,\n      \"driverRef\": \"zanardi\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Alessandro\",\n      \"surname\": \"Zanardi\",\n      \"dob\": \"1966-10-23\",\n      \"nationality\": \"Italian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Alex_Zanardi\"\n    },\n    {\n      \"driverId\": 71,\n      \"driverRef\": \"damon_hill\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Damon\",\n      \"surname\": \"Hill\",\n      \"dob\": \"1960-09-17\",\n      \"nationality\": \"British\",\n      \"url\": \"http://en.wikipedia.org/wiki/Damon_Hill\"\n    },\n    {\n      \"driverId\": 72,\n      \"driverRef\": \"sarrazin\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Stéphane\",\n      \"surname\": \"Sarrazin\",\n      \"dob\": \"1975-11-02\",\n      \"nationality\": \"French\",\n      \"url\": \"http://en.wikipedia.org/wiki/St%C3%A9phane_Sarrazin\"\n    },\n    {\n      \"driverId\": 73,\n      \"driverRef\": \"rosset\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Ricardo\",\n      \"surname\": \"Rosset\",\n      \"dob\": \"1968-07-27\",\n      \"nationality\": \"Brazilian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Ricardo_Rosset\"\n    },\n    {\n      \"driverId\": 74,\n      \"driverRef\": \"tuero\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Esteban\",\n      \"surname\": \"Tuero\",\n      \"dob\": \"1978-04-22\",\n      \"nationality\": \"Argentine\",\n      \"url\": \"http://en.wikipedia.org/wiki/Esteban_Tuero\"\n    },\n    {\n      \"driverId\": 75,\n      \"driverRef\": \"nakano\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Shinji\",\n      \"surname\": \"Nakano\",\n      \"dob\": \"1971-04-01\",\n      \"nationality\": \"Japanese\",\n      \"url\": \"http://en.wikipedia.org/wiki/Shinji_Nakano\"\n    },\n    {\n      \"driverId\": 76,\n      \"driverRef\": \"magnussen\",\n      \"number\": null,\n      \"code\": \"MAG\",\n      \"forename\": \"Jan\",\n      \"surname\": \"Magnussen\",\n      \"dob\": \"1973-07-04\",\n      \"nationality\": \"Danish\",\n      \"url\": \"http://en.wikipedia.org/wiki/Jan_Magnussen\"\n    },\n    {\n      \"driverId\": 77,\n      \"driverRef\": \"berger\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Gerhard\",\n      \"surname\": \"Berger\",\n      \"dob\": \"1959-08-27\",\n      \"nationality\": \"Austrian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Gerhard_Berger\"\n    },\n    {\n      \"driverId\": 78,\n      \"driverRef\": \"larini\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Nicola\",\n      \"surname\": \"Larini\",\n      \"dob\": \"1964-03-19\",\n      \"nationality\": \"Italian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Nicola_Larini\"\n    },\n    {\n      \"driverId\": 79,\n      \"driverRef\": \"katayama\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Ukyo\",\n      \"surname\": \"Katayama\",\n      \"dob\": \"1963-05-29\",\n      \"nationality\": \"Japanese\",\n      \"url\": \"http://en.wikipedia.org/wiki/Ukyo_Katayama\"\n    },\n    {\n      \"driverId\": 80,\n      \"driverRef\": \"sospiri\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Vincenzo\",\n      \"surname\": \"Sospiri\",\n      \"dob\": \"1966-10-07\",\n      \"nationality\": \"Italian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Vincenzo_Sospiri\"\n    },\n    {\n      \"driverId\": 81,\n      \"driverRef\": \"morbidelli\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Gianni\",\n      \"surname\": \"Morbidelli\",\n      \"dob\": \"1968-01-13\",\n      \"nationality\": \"Italian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Gianni_Morbidelli\"\n    },\n    {\n      \"driverId\": 82,\n      \"driverRef\": \"fontana\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Norberto\",\n      \"surname\": \"Fontana\",\n      \"dob\": \"1975-01-20\",\n      \"nationality\": \"Argentine\",\n      \"url\": \"http://en.wikipedia.org/wiki/Norberto_Fontana\"\n    },\n    {\n      \"driverId\": 83,\n      \"driverRef\": \"lamy\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Pedro\",\n      \"surname\": \"Lamy\",\n      \"dob\": \"1972-03-20\",\n      \"nationality\": \"Portuguese\",\n      \"url\": \"http://en.wikipedia.org/wiki/Pedro_Lamy\"\n    },\n    {\n      \"driverId\": 84,\n      \"driverRef\": \"brundle\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Martin\",\n      \"surname\": \"Brundle\",\n      \"dob\": \"1959-06-01\",\n      \"nationality\": \"British\",\n      \"url\": \"http://en.wikipedia.org/wiki/Martin_Brundle\"\n    },\n    {\n      \"driverId\": 85,\n      \"driverRef\": \"montermini\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Andrea\",\n      \"surname\": \"Montermini\",\n      \"dob\": \"1964-05-30\",\n      \"nationality\": \"Italian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Andrea_Montermini\"\n    },\n    {\n      \"driverId\": 86,\n      \"driverRef\": \"lavaggi\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Giovanni\",\n      \"surname\": \"Lavaggi\",\n      \"dob\": \"1958-02-18\",\n      \"nationality\": \"Italian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Giovanni_Lavaggi\"\n    },\n    {\n      \"driverId\": 87,\n      \"driverRef\": \"blundell\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Mark\",\n      \"surname\": \"Blundell\",\n      \"dob\": \"1966-04-08\",\n      \"nationality\": \"British\",\n      \"url\": \"http://en.wikipedia.org/wiki/Mark_Blundell\"\n    },\n    {\n      \"driverId\": 88,\n      \"driverRef\": \"suzuki\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Aguri\",\n      \"surname\": \"Suzuki\",\n      \"dob\": \"1960-09-08\",\n      \"nationality\": \"Japanese\",\n      \"url\": \"http://en.wikipedia.org/wiki/Aguri_Suzuki\"\n    },\n    {\n      \"driverId\": 89,\n      \"driverRef\": \"inoue\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Taki\",\n      \"surname\": \"Inoue\",\n      \"dob\": \"1963-09-05\",\n      \"nationality\": \"Japanese\",\n      \"url\": \"http://en.wikipedia.org/wiki/Taki_Inoue\"\n    },\n    {\n      \"driverId\": 90,\n      \"driverRef\": \"moreno\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Roberto\",\n      \"surname\": \"Moreno\",\n      \"dob\": \"1959-02-11\",\n      \"nationality\": \"Brazilian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Roberto_Moreno\"\n    },\n    {\n      \"driverId\": 91,\n      \"driverRef\": \"wendlinger\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Karl\",\n      \"surname\": \"Wendlinger\",\n      \"dob\": \"1968-12-20\",\n      \"nationality\": \"Austrian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Karl_Wendlinger\"\n    },\n    {\n      \"driverId\": 92,\n      \"driverRef\": \"gachot\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Bertrand\",\n      \"surname\": \"Gachot\",\n      \"dob\": \"1962-12-23\",\n      \"nationality\": \"Belgian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Bertrand_Gachot\"\n    },\n    {\n      \"driverId\": 93,\n      \"driverRef\": \"schiattarella\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Domenico\",\n      \"surname\": \"Schiattarella\",\n      \"dob\": \"1967-11-17\",\n      \"nationality\": \"Italian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Domenico_Schiattarella\"\n    },\n    {\n      \"driverId\": 94,\n      \"driverRef\": \"martini\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Pierluigi\",\n      \"surname\": \"Martini\",\n      \"dob\": \"1961-04-23\",\n      \"nationality\": \"Italian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Pierluigi_Martini\"\n    },\n    {\n      \"driverId\": 95,\n      \"driverRef\": \"mansell\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Nigel\",\n      \"surname\": \"Mansell\",\n      \"dob\": \"1953-08-08\",\n      \"nationality\": \"British\",\n      \"url\": \"http://en.wikipedia.org/wiki/Nigel_Mansell\"\n    },\n    {\n      \"driverId\": 96,\n      \"driverRef\": \"boullion\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Jean-Christophe\",\n      \"surname\": \"Boullion\",\n      \"dob\": \"1969-12-27\",\n      \"nationality\": \"French\",\n      \"url\": \"http://en.wikipedia.org/wiki/Jean-Christophe_Boullion\"\n    },\n    {\n      \"driverId\": 97,\n      \"driverRef\": \"papis\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Massimiliano\",\n      \"surname\": \"Papis\",\n      \"dob\": \"1969-10-03\",\n      \"nationality\": \"Italian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Massimiliano_Papis\"\n    },\n    {\n      \"driverId\": 98,\n      \"driverRef\": \"deletraz\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Jean-Denis\",\n      \"surname\": \"Délétraz\",\n      \"dob\": \"1963-10-01\",\n      \"nationality\": \"Swiss\",\n      \"url\": \"http://en.wikipedia.org/wiki/Jean-Denis_Deletraz\"\n    },\n    {\n      \"driverId\": 99,\n      \"driverRef\": \"tarquini\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Gabriele\",\n      \"surname\": \"Tarquini\",\n      \"dob\": \"1962-03-02\",\n      \"nationality\": \"Italian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Gabriele_Tarquini\"\n    },\n    {\n      \"driverId\": 100,\n      \"driverRef\": \"comas\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Érik\",\n      \"surname\": \"Comas\",\n      \"dob\": \"1963-09-28\",\n      \"nationality\": \"French\",\n      \"url\": \"http://en.wikipedia.org/wiki/%C3%89rik_Comas\"\n    },\n    {\n      \"driverId\": 101,\n      \"driverRef\": \"brabham\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"David\",\n      \"surname\": \"Brabham\",\n      \"dob\": \"1965-09-05\",\n      \"nationality\": \"Australian\",\n      \"url\": \"http://en.wikipedia.org/wiki/David_Brabham\"\n    },\n    {\n      \"driverId\": 102,\n      \"driverRef\": \"senna\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Ayrton\",\n      \"surname\": \"Senna\",\n      \"dob\": \"1960-03-21\",\n      \"nationality\": \"Brazilian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Ayrton_Senna\"\n    },\n    {\n      \"driverId\": 103,\n      \"driverRef\": \"bernard\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Éric\",\n      \"surname\": \"Bernard\",\n      \"dob\": \"1964-08-24\",\n      \"nationality\": \"French\",\n      \"url\": \"http://en.wikipedia.org/wiki/%C3%89ric_Bernard\"\n    },\n    {\n      \"driverId\": 104,\n      \"driverRef\": \"fittipaldi\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Christian\",\n      \"surname\": \"Fittipaldi\",\n      \"dob\": \"1971-01-18\",\n      \"nationality\": \"Brazilian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Christian_Fittipaldi\"\n    },\n    {\n      \"driverId\": 105,\n      \"driverRef\": \"alboreto\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Michele\",\n      \"surname\": \"Alboreto\",\n      \"dob\": \"1956-12-23\",\n      \"nationality\": \"Italian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Michele_Alboreto\"\n    },\n    {\n      \"driverId\": 106,\n      \"driverRef\": \"beretta\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Olivier\",\n      \"surname\": \"Beretta\",\n      \"dob\": \"1969-11-23\",\n      \"nationality\": \"Monegasque\",\n      \"url\": \"http://en.wikipedia.org/wiki/Olivier_Beretta\"\n    },\n    {\n      \"driverId\": 107,\n      \"driverRef\": \"ratzenberger\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Roland\",\n      \"surname\": \"Ratzenberger\",\n      \"dob\": \"1960-07-04\",\n      \"nationality\": \"Austrian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Roland_Ratzenberger\"\n    },\n    {\n      \"driverId\": 108,\n      \"driverRef\": \"belmondo\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Paul\",\n      \"surname\": \"Belmondo\",\n      \"dob\": \"1963-04-23\",\n      \"nationality\": \"French\",\n      \"url\": \"http://en.wikipedia.org/wiki/Paul_Belmondo\"\n    },\n    {\n      \"driverId\": 109,\n      \"driverRef\": \"lehto\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Jyrki\",\n      \"surname\": \"Järvilehto\",\n      \"dob\": \"1966-01-31\",\n      \"nationality\": \"Finnish\",\n      \"url\": \"http://en.wikipedia.org/wiki/Jyrki_J%C3%A4rvilehto\"\n    },\n    {\n      \"driverId\": 110,\n      \"driverRef\": \"cesaris\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Andrea\",\n      \"surname\": \"de Cesaris\",\n      \"dob\": \"1959-05-31\",\n      \"nationality\": \"Italian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Andrea_de_Cesaris\"\n    },\n    {\n      \"driverId\": 111,\n      \"driverRef\": \"gounon\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Jean-Marc\",\n      \"surname\": \"Gounon\",\n      \"dob\": \"1963-01-01\",\n      \"nationality\": \"French\",\n      \"url\": \"http://en.wikipedia.org/wiki/Jean-Marc_Gounon\"\n    },\n    {\n      \"driverId\": 112,\n      \"driverRef\": \"alliot\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Philippe\",\n      \"surname\": \"Alliot\",\n      \"dob\": \"1954-07-27\",\n      \"nationality\": \"French\",\n      \"url\": \"http://en.wikipedia.org/wiki/Philippe_Alliot\"\n    },\n    {\n      \"driverId\": 113,\n      \"driverRef\": \"adams\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Philippe\",\n      \"surname\": \"Adams\",\n      \"dob\": \"1969-11-19\",\n      \"nationality\": \"Belgian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Philippe_Adams\"\n    },\n    {\n      \"driverId\": 114,\n      \"driverRef\": \"dalmas\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Yannick\",\n      \"surname\": \"Dalmas\",\n      \"dob\": \"1961-07-28\",\n      \"nationality\": \"French\",\n      \"url\": \"http://en.wikipedia.org/wiki/Yannick_Dalmas\"\n    },\n    {\n      \"driverId\": 115,\n      \"driverRef\": \"noda\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Hideki\",\n      \"surname\": \"Noda\",\n      \"dob\": \"1969-03-07\",\n      \"nationality\": \"Japanese\",\n      \"url\": \"http://en.wikipedia.org/wiki/Hideki_Noda\"\n    },\n    {\n      \"driverId\": 116,\n      \"driverRef\": \"lagorce\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Franck\",\n      \"surname\": \"Lagorce\",\n      \"dob\": \"1968-09-01\",\n      \"nationality\": \"French\",\n      \"url\": \"http://en.wikipedia.org/wiki/Franck_Lagorce\"\n    },\n    {\n      \"driverId\": 117,\n      \"driverRef\": \"prost\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Alain\",\n      \"surname\": \"Prost\",\n      \"dob\": \"1955-02-24\",\n      \"nationality\": \"French\",\n      \"url\": \"http://en.wikipedia.org/wiki/Alain_Prost\"\n    },\n    {\n      \"driverId\": 118,\n      \"driverRef\": \"warwick\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Derek\",\n      \"surname\": \"Warwick\",\n      \"dob\": \"1954-08-27\",\n      \"nationality\": \"British\",\n      \"url\": \"http://en.wikipedia.org/wiki/Derek_Warwick\"\n    },\n    {\n      \"driverId\": 119,\n      \"driverRef\": \"patrese\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Riccardo\",\n      \"surname\": \"Patrese\",\n      \"dob\": \"1954-04-17\",\n      \"nationality\": \"Italian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Riccardo_Patrese\"\n    },\n    {\n      \"driverId\": 120,\n      \"driverRef\": \"barbazza\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Fabrizio\",\n      \"surname\": \"Barbazza\",\n      \"dob\": \"1963-04-02\",\n      \"nationality\": \"Italian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Fabrizio_Barbazza\"\n    },\n    {\n      \"driverId\": 121,\n      \"driverRef\": \"andretti\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Michael\",\n      \"surname\": \"Andretti\",\n      \"dob\": \"1962-10-05\",\n      \"nationality\": \"American\",\n      \"url\": \"http://en.wikipedia.org/wiki/Michael_Andretti\"\n    },\n    {\n      \"driverId\": 122,\n      \"driverRef\": \"capelli\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Ivan\",\n      \"surname\": \"Capelli\",\n      \"dob\": \"1963-05-24\",\n      \"nationality\": \"Italian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Ivan_Capelli\"\n    },\n    {\n      \"driverId\": 123,\n      \"driverRef\": \"boutsen\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Thierry\",\n      \"surname\": \"Boutsen\",\n      \"dob\": \"1957-07-13\",\n      \"nationality\": \"Belgian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Thierry_Boutsen\"\n    },\n    {\n      \"driverId\": 124,\n      \"driverRef\": \"apicella\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Marco\",\n      \"surname\": \"Apicella\",\n      \"dob\": \"1965-10-07\",\n      \"nationality\": \"Italian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Marco_Apicella\"\n    },\n    {\n      \"driverId\": 125,\n      \"driverRef\": \"naspetti\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Emanuele\",\n      \"surname\": \"Naspetti\",\n      \"dob\": \"1968-02-24\",\n      \"nationality\": \"Italian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Emanuele_Naspetti\"\n    },\n    {\n      \"driverId\": 126,\n      \"driverRef\": \"toshio_suzuki\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Toshio\",\n      \"surname\": \"Suzuki\",\n      \"dob\": \"1955-03-10\",\n      \"nationality\": \"Japanese\",\n      \"url\": \"http://en.wikipedia.org/wiki/Toshio_Suzuki_(driver)\"\n    },\n    {\n      \"driverId\": 127,\n      \"driverRef\": \"gugelmin\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Maurício\",\n      \"surname\": \"Gugelmin\",\n      \"dob\": \"1963-04-20\",\n      \"nationality\": \"Brazilian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Maur%C3%ADcio_Gugelmin\"\n    },\n    {\n      \"driverId\": 128,\n      \"driverRef\": \"poele\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Eric\",\n      \"surname\": \"van de Poele\",\n      \"dob\": \"1961-09-30\",\n      \"nationality\": \"Belgian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Eric_van_de_Poele\"\n    },\n    {\n      \"driverId\": 129,\n      \"driverRef\": \"grouillard\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Olivier\",\n      \"surname\": \"Grouillard\",\n      \"dob\": \"1958-09-02\",\n      \"nationality\": \"French\",\n      \"url\": \"http://en.wikipedia.org/wiki/Olivier_Grouillard\"\n    },\n    {\n      \"driverId\": 130,\n      \"driverRef\": \"chiesa\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Andrea\",\n      \"surname\": \"Chiesa\",\n      \"dob\": \"1964-05-06\",\n      \"nationality\": \"Swiss\",\n      \"url\": \"http://en.wikipedia.org/wiki/Andrea_Chiesa\"\n    },\n    {\n      \"driverId\": 131,\n      \"driverRef\": \"modena\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Stefano\",\n      \"surname\": \"Modena\",\n      \"dob\": \"1963-05-12\",\n      \"nationality\": \"Italian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Stefano_Modena\"\n    },\n    {\n      \"driverId\": 132,\n      \"driverRef\": \"amati\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Giovanna\",\n      \"surname\": \"Amati\",\n      \"dob\": \"1959-07-20\",\n      \"nationality\": \"Italian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Giovanna_Amati\"\n    },\n    {\n      \"driverId\": 133,\n      \"driverRef\": \"caffi\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Alex\",\n      \"surname\": \"Caffi\",\n      \"dob\": \"1964-03-18\",\n      \"nationality\": \"Italian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Alex_Caffi\"\n    },\n    {\n      \"driverId\": 134,\n      \"driverRef\": \"bertaggia\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Enrico\",\n      \"surname\": \"Bertaggia\",\n      \"dob\": \"1964-09-19\",\n      \"nationality\": \"Italian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Enrico_Bertaggia\"\n    },\n    {\n      \"driverId\": 135,\n      \"driverRef\": \"mccarthy\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Perry\",\n      \"surname\": \"McCarthy\",\n      \"dob\": \"1961-03-03\",\n      \"nationality\": \"British\",\n      \"url\": \"http://en.wikipedia.org/wiki/Perry_McCarthy\"\n    },\n    {\n      \"driverId\": 136,\n      \"driverRef\": \"lammers\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Jan\",\n      \"surname\": \"Lammers\",\n      \"dob\": \"1956-06-02\",\n      \"nationality\": \"Dutch\",\n      \"url\": \"http://en.wikipedia.org/wiki/Jan_Lammers\"\n    },\n    {\n      \"driverId\": 137,\n      \"driverRef\": \"piquet\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Nelson\",\n      \"surname\": \"Piquet\",\n      \"dob\": \"1952-08-17\",\n      \"nationality\": \"Brazilian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Nelson_Piquet\"\n    },\n    {\n      \"driverId\": 138,\n      \"driverRef\": \"satoru_nakajima\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Satoru\",\n      \"surname\": \"Nakajima\",\n      \"dob\": \"1953-02-23\",\n      \"nationality\": \"Japanese\",\n      \"url\": \"http://en.wikipedia.org/wiki/Satoru_Nakajima\"\n    },\n    {\n      \"driverId\": 139,\n      \"driverRef\": \"pirro\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Emanuele\",\n      \"surname\": \"Pirro\",\n      \"dob\": \"1962-01-12\",\n      \"nationality\": \"Italian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Emanuele_Pirro\"\n    },\n    {\n      \"driverId\": 140,\n      \"driverRef\": \"johansson\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Stefan\",\n      \"surname\": \"Johansson\",\n      \"dob\": \"1956-09-08\",\n      \"nationality\": \"Swedish\",\n      \"url\": \"http://en.wikipedia.org/wiki/Stefan_Johansson\"\n    },\n    {\n      \"driverId\": 141,\n      \"driverRef\": \"bailey\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Julian\",\n      \"surname\": \"Bailey\",\n      \"dob\": \"1961-10-09\",\n      \"nationality\": \"British\",\n      \"url\": \"http://en.wikipedia.org/wiki/Julian_Bailey\"\n    },\n    {\n      \"driverId\": 142,\n      \"driverRef\": \"chaves\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Pedro\",\n      \"surname\": \"Chaves\",\n      \"dob\": \"1965-02-27\",\n      \"nationality\": \"Portuguese\",\n      \"url\": \"http://en.wikipedia.org/wiki/Pedro_Chaves\"\n    },\n    {\n      \"driverId\": 143,\n      \"driverRef\": \"bartels\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Michael\",\n      \"surname\": \"Bartels\",\n      \"dob\": \"1968-03-08\",\n      \"nationality\": \"German\",\n      \"url\": \"http://en.wikipedia.org/wiki/Michael_Bartels\"\n    },\n    {\n      \"driverId\": 144,\n      \"driverRef\": \"hattori\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Naoki\",\n      \"surname\": \"Hattori\",\n      \"dob\": \"1966-06-13\",\n      \"nationality\": \"Japanese\",\n      \"url\": \"http://en.wikipedia.org/wiki/Naoki_Hattori\"\n    },\n    {\n      \"driverId\": 145,\n      \"driverRef\": \"nannini\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Alessandro\",\n      \"surname\": \"Nannini\",\n      \"dob\": \"1959-07-07\",\n      \"nationality\": \"Italian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Alessandro_Nannini\"\n    },\n    {\n      \"driverId\": 146,\n      \"driverRef\": \"schneider\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Bernd\",\n      \"surname\": \"Schneider\",\n      \"dob\": \"1964-07-20\",\n      \"nationality\": \"German\",\n      \"url\": \"http://en.wikipedia.org/wiki/Bernd_Schneider_(racecar_driver)\"\n    },\n    {\n      \"driverId\": 147,\n      \"driverRef\": \"barilla\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Paolo\",\n      \"surname\": \"Barilla\",\n      \"dob\": \"1961-04-20\",\n      \"nationality\": \"Italian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Paolo_Barilla\"\n    },\n    {\n      \"driverId\": 148,\n      \"driverRef\": \"foitek\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Gregor\",\n      \"surname\": \"Foitek\",\n      \"dob\": \"1965-03-27\",\n      \"nationality\": \"Swiss\",\n      \"url\": \"http://en.wikipedia.org/wiki/Gregor_Foitek\"\n    },\n    {\n      \"driverId\": 149,\n      \"driverRef\": \"langes\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Claudio\",\n      \"surname\": \"Langes\",\n      \"dob\": \"1960-07-20\",\n      \"nationality\": \"Italian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Claudio_Langes\"\n    },\n    {\n      \"driverId\": 150,\n      \"driverRef\": \"gary_brabham\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Gary\",\n      \"surname\": \"Brabham\",\n      \"dob\": \"1961-03-29\",\n      \"nationality\": \"Australian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Gary_Brabham\"\n    },\n    {\n      \"driverId\": 151,\n      \"driverRef\": \"donnelly\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Martin\",\n      \"surname\": \"Donnelly\",\n      \"dob\": \"1964-03-26\",\n      \"nationality\": \"British\",\n      \"url\": \"http://en.wikipedia.org/wiki/Martin_Donnelly_(racing_driver)\"\n    },\n    {\n      \"driverId\": 152,\n      \"driverRef\": \"giacomelli\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Bruno\",\n      \"surname\": \"Giacomelli\",\n      \"dob\": \"1952-09-10\",\n      \"nationality\": \"Italian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Bruno_Giacomelli\"\n    },\n    {\n      \"driverId\": 153,\n      \"driverRef\": \"alguersuari\",\n      \"number\": null,\n      \"code\": \"ALG\",\n      \"forename\": \"Jaime\",\n      \"surname\": \"Alguersuari\",\n      \"dob\": \"1990-03-23\",\n      \"nationality\": \"Spanish\",\n      \"url\": \"http://en.wikipedia.org/wiki/Jaime_Alguersuari\"\n    },\n    {\n      \"driverId\": 154,\n      \"driverRef\": \"grosjean\",\n      \"number\": 8,\n      \"code\": \"GRO\",\n      \"forename\": \"Romain\",\n      \"surname\": \"Grosjean\",\n      \"dob\": \"1986-04-17\",\n      \"nationality\": \"French\",\n      \"url\": \"http://en.wikipedia.org/wiki/Romain_Grosjean\"\n    },\n    {\n      \"driverId\": 155,\n      \"driverRef\": \"kobayashi\",\n      \"number\": 10,\n      \"code\": \"KOB\",\n      \"forename\": \"Kamui\",\n      \"surname\": \"Kobayashi\",\n      \"dob\": \"1986-09-13\",\n      \"nationality\": \"Japanese\",\n      \"url\": \"http://en.wikipedia.org/wiki/Kamui_Kobayashi\"\n    },\n    {\n      \"driverId\": 156,\n      \"driverRef\": \"palmer\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Jonathan\",\n      \"surname\": \"Palmer\",\n      \"dob\": \"1956-11-07\",\n      \"nationality\": \"British\",\n      \"url\": \"http://en.wikipedia.org/wiki/Jonathan_Palmer\"\n    },\n    {\n      \"driverId\": 157,\n      \"driverRef\": \"danner\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Christian\",\n      \"surname\": \"Danner\",\n      \"dob\": \"1958-04-04\",\n      \"nationality\": \"German\",\n      \"url\": \"http://en.wikipedia.org/wiki/Christian_Danner\"\n    },\n    {\n      \"driverId\": 158,\n      \"driverRef\": \"cheever\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Eddie\",\n      \"surname\": \"Cheever\",\n      \"dob\": \"1958-01-10\",\n      \"nationality\": \"American\",\n      \"url\": \"http://en.wikipedia.org/wiki/Eddie_Cheever\"\n    },\n    {\n      \"driverId\": 159,\n      \"driverRef\": \"sala\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Luis\",\n      \"surname\": \"Pérez-Sala\",\n      \"dob\": \"1959-05-15\",\n      \"nationality\": \"Spanish\",\n      \"url\": \"http://en.wikipedia.org/wiki/Luis_Perez-Sala\"\n    },\n    {\n      \"driverId\": 160,\n      \"driverRef\": \"ghinzani\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Piercarlo\",\n      \"surname\": \"Ghinzani\",\n      \"dob\": \"1952-01-16\",\n      \"nationality\": \"Italian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Piercarlo_Ghinzani\"\n    },\n    {\n      \"driverId\": 161,\n      \"driverRef\": \"weidler\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Volker\",\n      \"surname\": \"Weidler\",\n      \"dob\": \"1962-03-18\",\n      \"nationality\": \"German\",\n      \"url\": \"http://en.wikipedia.org/wiki/Volker_Weidler\"\n    },\n    {\n      \"driverId\": 162,\n      \"driverRef\": \"raphanel\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Pierre-Henri\",\n      \"surname\": \"Raphanel\",\n      \"dob\": \"1961-05-27\",\n      \"nationality\": \"French\",\n      \"url\": \"http://en.wikipedia.org/wiki/Pierre-Henri_Raphanel\"\n    },\n    {\n      \"driverId\": 163,\n      \"driverRef\": \"arnoux\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"René\",\n      \"surname\": \"Arnoux\",\n      \"dob\": \"1948-07-04\",\n      \"nationality\": \"French\",\n      \"url\": \"http://en.wikipedia.org/wiki/Ren%C3%A9_Arnoux\"\n    },\n    {\n      \"driverId\": 164,\n      \"driverRef\": \"joachim_winkelhock\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Joachim\",\n      \"surname\": \"Winkelhock\",\n      \"dob\": \"1960-10-24\",\n      \"nationality\": \"German\",\n      \"url\": \"http://en.wikipedia.org/wiki/Joachim_Winkelhock\"\n    },\n    {\n      \"driverId\": 165,\n      \"driverRef\": \"larrauri\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Oscar\",\n      \"surname\": \"Larrauri\",\n      \"dob\": \"1954-08-19\",\n      \"nationality\": \"Argentine\",\n      \"url\": \"http://en.wikipedia.org/wiki/Oscar_Larrauri\"\n    },\n    {\n      \"driverId\": 166,\n      \"driverRef\": \"streiff\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Philippe\",\n      \"surname\": \"Streiff\",\n      \"dob\": \"1955-06-26\",\n      \"nationality\": \"French\",\n      \"url\": \"http://en.wikipedia.org/wiki/Philippe_Streiff\"\n    },\n    {\n      \"driverId\": 167,\n      \"driverRef\": \"campos\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Adrián\",\n      \"surname\": \"Campos\",\n      \"dob\": \"1960-06-17\",\n      \"nationality\": \"Spanish\",\n      \"url\": \"http://en.wikipedia.org/wiki/Adri%C3%A1n_Campos\"\n    },\n    {\n      \"driverId\": 168,\n      \"driverRef\": \"schlesser\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Jean-Louis\",\n      \"surname\": \"Schlesser\",\n      \"dob\": \"1948-09-12\",\n      \"nationality\": \"French\",\n      \"url\": \"http://en.wikipedia.org/wiki/Jean-Louis_Schlesser\"\n    },\n    {\n      \"driverId\": 169,\n      \"driverRef\": \"fabre\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Pascal\",\n      \"surname\": \"Fabre\",\n      \"dob\": \"1960-01-09\",\n      \"nationality\": \"French\",\n      \"url\": \"http://en.wikipedia.org/wiki/Pascal_Fabre\"\n    },\n    {\n      \"driverId\": 170,\n      \"driverRef\": \"fabi\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Teo\",\n      \"surname\": \"Fabi\",\n      \"dob\": \"1955-03-09\",\n      \"nationality\": \"Italian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Teo_Fabi\"\n    },\n    {\n      \"driverId\": 171,\n      \"driverRef\": \"forini\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Franco\",\n      \"surname\": \"Forini\",\n      \"dob\": \"1958-09-22\",\n      \"nationality\": \"Swiss\",\n      \"url\": \"http://en.wikipedia.org/wiki/Franco_Forini\"\n    },\n    {\n      \"driverId\": 172,\n      \"driverRef\": \"laffite\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Jacques\",\n      \"surname\": \"Laffite\",\n      \"dob\": \"1943-11-21\",\n      \"nationality\": \"French\",\n      \"url\": \"http://en.wikipedia.org/wiki/Jacques_Laffite\"\n    },\n    {\n      \"driverId\": 173,\n      \"driverRef\": \"angelis\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Elio\",\n      \"surname\": \"de Angelis\",\n      \"dob\": \"1958-03-26\",\n      \"nationality\": \"Italian\",\n      \"url\": \"http://en.wikipedia.org/wiki/Elio_de_Angelis\"\n    },\n    {\n      \"driverId\": 174,\n      \"driverRef\": \"dumfries\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Johnny\",\n      \"surname\": \"Dumfries\",\n      \"dob\": \"1958-04-26\",\n      \"nationality\": \"British\",\n      \"url\": \"http://en.wikipedia.org/wiki/Johnny_Dumfries\"\n    },\n    {\n      \"driverId\": 175,\n      \"driverRef\": \"tambay\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Patrick\",\n      \"surname\": \"Tambay\",\n      \"dob\": \"1949-06-25\",\n      \"nationality\": \"French\",\n      \"url\": \"http://en.wikipedia.org/wiki/Patrick_Tambay\"\n    },\n    {\n      \"driverId\": 176,\n      \"driverRef\": \"surer\",\n      \"number\": null,\n      \"code\": null,\n      \"forename\": \"Marc\",\n      \"surname\": \"Surer\",\n      \"dob\": \"1951-09-18\",\n      \"nationality\": \"Swiss\",\n      \"url\": \"http://en.wikipedia.org/wiki/Marc_Surer\"\n    },\n    {\n      \"driverId\": 177,\n",
+          "truncated": true
+        }
+      },
+      "ok": true,
+      "plan": "1. Check drivers.json structure for surname column\n2. Run SQL query to join qualifying with drivers and find surname with minimum q2 for raceId=19\n3. Submit answer"
+    },
+    {
+      "step_index": 5,
+      "thought": "I have the data structure. The qualifying.csv has q2 column with lap times, and drivers.json has surname column. I need to use Python to process and join the data.",
+      "action": "execute_python",
+      "action_input": {
+        "code": "import csv\nimport json\n\n# Read qualifying.csv\nqualifying_data = {}\nwith open('csv/qualifying.csv', 'r') as f:\n    reader = csv.DictReader(f)\n    for row in reader:\n        race_id = row['raceId']\n        driver_id = row['driverId']\n        key = (race_id, driver_id)\n        qualifying_data[key] = {\n            'raceId': row['raceId'],\n            'driverId': row['driverId'],\n            'q2': row['q2'] if row['q2'] else None\n        }\n\n# Read drivers.json\nwith open('json/drivers.json', 'r') as f:\n    drivers_json = json.load(f)\n\ndrivers = {d['driverId']: d for d in drivers_json['records']}\n\n# Find raceId 19, second qualifying period (q2), best (minimum) lap time\nbest_q2 = None\nbest_driver_id = None\nbest_q2_value = None\n\nfor (race_id, driver_id), qual in qualifying_data.items():\n    if race_id == '19' and qual['q2'] is not None:\n        time_parts = qual['q2'].split(':')\n        seconds = float(time_parts[0]) * 60 + float(time_parts[1])\n        \n        if best_q2_value is None or seconds < best_q2_value:\n            best_q2_value = seconds\n            best_q2 = qual['q2']\n            best_driver_id = driver_id\n\ndriver = drivers[best_driver_id]\nsurname = driver['surname']\n\nprint(f\"Best q2 time: {best_q2}\")\nprint(f\"Driver ID: {best_driver_id}\")\nprint(f\"Surname: {surname}\")"
+      },
+      "raw_response": "\n\n```json\n{\"thought\":\"I have the data structure. The qualifying.csv has q2 column with lap times, and drivers.json has surname column. I need to use Python to process and join the data.\",\"plan\":\"Write Python code to process the CSV and JSON files and find the driver surname with the best (minimum) q2 lap time for raceId=19.\",\"action\":\"execute_python\",\"action_input\":{\"code\":\"import csv\\nimport json\\n\\n# Read qualifying.csv\\nqualifying_data = {}\\nwith open('csv/qualifying.csv', 'r') as f:\\n    reader = csv.DictReader(f)\\n    for row in reader:\\n        race_id = row['raceId']\\n        driver_id = row['driverId']\\n        key = (race_id, driver_id)\\n        qualifying_data[key] = {\\n            'raceId': row['raceId'],\\n            'driverId': row['driverId'],\\n            'q2': row['q2'] if row['q2'] else None\\n        }\\n\\n# Read drivers.json\\nwith open('json/drivers.json', 'r') as f:\\n    drivers_json = json.load(f)\\n\\ndrivers = {d['driverId']: d for d in drivers_json['records']}\\n\\n# Find raceId 19, second qualifying period (q2), best (minimum) lap time\\nbest_q2 = None\\nbest_driver_id = None\\nbest_q2_value = None\\n\\nfor (race_id, driver_id), qual in qualifying_data.items():\\n    if race_id == '19' and qual['q2'] is not None:\\n        time_parts = qual['q2'].split(':')\\n        seconds = float(time_parts[0]) * 60 + float(time_parts[1])\\n        \\n        if best_q2_value is None or seconds < best_q2_value:\\n            best_q2_value = seconds\\n            best_q2 = qual['q2']\\n            best_driver_id = driver_id\\n\\ndriver = drivers[best_driver_id]\\nsurname = driver['surname']\\n\\nprint(f\\\"Best q2 time: {best_q2}\\\")\\nprint(f\\\"Driver ID: {best_driver_id}\\\")\\nprint(f\\\"Surname: {surname}\\\")\"}}\n```",
+      "observation": {
+        "ok": false,
+        "tool": "execute_python",
+        "content": {
+          "success": false,
+          "error": "'8'",
+          "traceback": "Traceback (most recent call last):\n  File \"/Users/hyeonseungkim/workspace/kddcup2026-blueshabu/src/data_agent_baseline/tools/python_exec.py\", line 91, in _run_python_code\n    exec(code, namespace, namespace)\n  File \"<string>\", line 39, in <module>\nKeyError: '8'\n",
+          "output": "",
+          "stderr": ""
+        }
+      },
+      "ok": false,
+      "plan": "Write Python code to process the CSV and JSON files and find the driver surname with the best (minimum) q2 lap time for raceId=19."
+    },
+    {
+      "step_index": 6,
+      "thought": "The error shows that driverId '8' was not found in the drivers dictionary. This could be a string vs integer mismatch. Let me fix the code to handle this properly and also check the data more carefully.",
+      "action": "execute_python",
+      "action_input": {
+        "code": "import csv\nimport json\n\n# Read qualifying.csv\nqualifying_data = []\nwith open('csv/qualifying.csv', 'r') as f:\n    reader = csv.DictReader(f)\n    for row in reader:\n        qualifying_data.append(row)\n\n# Read drivers.json\nwith open('json/drivers.json', 'r') as f:\n    drivers_json = json.load(f)\n\n# Create drivers dictionary with string keys\ndrivers = {str(d['driverId']): d for d in drivers_json['records']}\n\n# Find raceId 19, second qualifying period (q2), best (minimum) lap time\nbest_q2 = None\nbest_driver_id = None\nbest_q2_value = None\n\nfor qual in qualifying_data:\n    if qual['raceId'] == '19' and qual['q2'] is not None and qual['q2'].strip():\n        time_parts = qual['q2'].split(':')\n        seconds = float(time_parts[0]) * 60 + float(time_parts[1])\n        driver_id = str(qual['driverId'])\n        \n        if best_q2_value is None or seconds < best_q2_value:\n            best_q2_value = seconds\n            best_q2 = qual['q2']\n            best_driver_id = driver_id\n\nif best_driver_id and best_driver_id in drivers:\n    driver = drivers[best_driver_id]\n    surname = driver['surname']\n    print(f\"Best q2 time: {best_q2}\")\n    print(f\"Driver ID: {best_driver_id}\")\n    print(f\"Surname: {surname}\")\nelse:\n    print(f\"Driver ID {best_driver_id} not found in drivers\")\n    print(f\"Best q2 time: {best_q2}\")\n    # Print all drivers with q2 for race 19 to debug\n    for qual in qualifying_data:\n        if qual['raceId'] == '19' and qual['q2'] is not None and qual['q2'].strip():\n            print(f\"Driver {qual['driverId']}: q2={qual['q2']}\")"
+      },
+      "raw_response": "\n\n```json\n{\"thought\":\"The error shows that driverId '8' was not found in the drivers dictionary. This could be a string vs integer mismatch. Let me fix the code to handle this properly and also check the data more carefully.\",\"plan\":\"Fix the Python code to handle string/integer mismatches between qualifying.csv driverId and drivers.json driverId.\",\"action\":\"execute_python\",\"action_input\":{\"code\":\"import csv\\nimport json\\n\\n# Read qualifying.csv\\nqualifying_data = []\\nwith open('csv/qualifying.csv', 'r') as f:\\n    reader = csv.DictReader(f)\\n    for row in reader:\\n        qualifying_data.append(row)\\n\\n# Read drivers.json\\nwith open('json/drivers.json', 'r') as f:\\n    drivers_json = json.load(f)\\n\\n# Create drivers dictionary with string keys\\ndrivers = {str(d['driverId']): d for d in drivers_json['records']}\\n\\n# Find raceId 19, second qualifying period (q2), best (minimum) lap time\\nbest_q2 = None\\nbest_driver_id = None\\nbest_q2_value = None\\n\\nfor qual in qualifying_data:\\n    if qual['raceId'] == '19' and qual['q2'] is not None and qual['q2'].strip():\\n        time_parts = qual['q2'].split(':')\\n        seconds = float(time_parts[0]) * 60 + float(time_parts[1])\\n        driver_id = str(qual['driverId'])\\n        \\n        if best_q2_value is None or seconds < best_q2_value:\\n            best_q2_value = seconds\\n            best_q2 = qual['q2']\\n            best_driver_id = driver_id\\n\\nif best_driver_id and best_driver_id in drivers:\\n    driver = drivers[best_driver_id]\\n    surname = driver['surname']\\n    print(f\\\"Best q2 time: {best_q2}\\\")\\n    print(f\\\"Driver ID: {best_driver_id}\\\")\\n    print(f\\\"Surname: {surname}\\\")\\nelse:\\n    print(f\\\"Driver ID {best_driver_id} not found in drivers\\\")\\n    print(f\\\"Best q2 time: {best_q2}\\\")\\n    # Print all drivers with q2 for race 19 to debug\\n    for qual in qualifying_data:\\n        if qual['raceId'] == '19' and qual['q2'] is not None and qual['q2'].strip():\\n            print(f\\\"Driver {qual['driverId']}: q2={qual['q2']}\\\")\"}}\n```",
+      "observation": {
+        "ok": true,
+        "tool": "execute_python",
+        "content": {
+          "success": true,
+          "output": "Best q2 time: 1:34.188\nDriver ID: 8\nSurname: Räikkönen\n",
+          "stderr": ""
+        }
+      },
+      "ok": true,
+      "plan": "Fix the Python code to handle string/integer mismatches between qualifying.csv driverId and drivers.json driverId."
+    },
+    {
+      "step_index": 7,
+      "thought": "The Python code successfully found that for race 19, the driver with the best (minimum) q2 lap time of 1:34.188 is Räikkönen. This matches the knowledge.md example which shows the same query result. PRE-ANSWER VERIFICATION: [1]surname is text (Räikkönen) ✓ [2]single best (minimum) lap time ✓ [3]no qualifier issues ✓ [4]single row ✓ [5]distinct n/a. The answer is confirmed.",
+      "action": "answer",
+      "action_input": {
+        "columns": [
+          "surname"
+        ],
+        "rows": [
+          [
+            "Räikkönen"
+          ]
+        ]
+      },
+      "raw_response": "\n\n```json\n{\"thought\":\"The Python code successfully found that for race 19, the driver with the best (minimum) q2 lap time of 1:34.188 is Räikkönen. This matches the knowledge.md example which shows the same query result. PRE-ANSWER VERIFICATION: [1]surname is text (Räikkönen) ✓ [2]single best (minimum) lap time ✓ [3]no qualifier issues ✓ [4]single row ✓ [5]distinct n/a. The answer is confirmed.\",\"plan\":\"Submit the final answer with the surname.\",\"action\":\"answer\",\"action_input\":{\"columns\":[\"surname\"],\"rows\":[[\"Räikkönen\"]]}}\n```",
+      "observation": {
+        "ok": true,
+        "tool": "answer",
+        "content": {
+          "status": "submitted",
+          "column_count": 1,
+          "row_count": 1
+        }
+      },
+      "ok": true,
+      "plan": "Submit the final answer with the surname."
+    }
+  ],
+  "failure_reason": null,
+  "succeeded": true,
+  "memory_usage": {
+    "enabled": true,
+    "stored_steps": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7
+    ],
+    "recall_calls": []
+  },
+  "e2e_elapsed_seconds": 224.497
+}
