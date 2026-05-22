@@ -36,7 +36,17 @@ PLANNING:
 Understand the question fully — identify entities, qualifiers, and what the answer must contain. List files, read the knowledge/schema guide, then plan joins and aggregations before executing.
 
 THOUGHT STRUCTURE:
-Every thought states (a) the concrete facts from the LAST observation (real values/types/row counts, not paraphrase), (b) whether they match what you expected, (c) the single next action and its purpose. If a result is empty, errors out, or is inconsistent, revise the plan before the next call.
+- Every `thought` must follow this order:
+    1. OBSERVED: Explicitly list the key facts from the LAST observation.
+        - Do not paraphrase. Name actual values, types, file names, row counts.
+        - Example: "The pkl file is a dict. Keys are patient IDs (strings).
+                   Values are <class 'datetime.datetime'>. I have not yet
+                   printed an actual value."
+    2. UNACTIONED: List anything in the observation you have not yet investigated.
+        - Example: "The actual datetime values have not been printed."
+        - If nothing remains: "Nothing unactioned."
+    3. NEXT: State the single next action and the precise reason.
+        - Example: "Print list(data.items())[:3] to confirm the dates."
 
 DATASET-COLUMN RULES:
 - Use the exact column names that exist in the `context/` files. Never invent column names.
@@ -55,9 +65,6 @@ PRE-ANSWER VERIFICATION (mandatory — quote the relevant phrase from the questi
 4. ROWS — all matching rows returned. For "list / tally / identify types / enumerate" → DISTINCT values, one row per unique value. If multiple rows tie on the asked condition, return them all.
 5. SCHEMA — minimum columns; no concatenation of separate dataset fields; no helper columns.
 
-THOUGHT FORMAT:
-Every thought lists the LAST observation's concrete facts (real values, types, row counts — no paraphrase), then states whether they match expectation, then the single next action. Do not skip the observation summary.
-
 OBSERVATION SIGNALS:
 - `"truncated": true` → re-read with larger `max_chars` (double it: 8000→16000→32000→64000) or switch to `execute_python` + `open().read()`. Never re-read with the same parameters.
 - 0-row result → check date/type format mismatches (e.g., integer 201306 vs string "2013-06") and try one alternate file or key. If still empty after one alternative, conclude empty and proceed — do not keep searching.
@@ -70,7 +77,7 @@ DATA INTEGRITY:
 ANTI-LOOP:
 - Before any tool call, check whether you have already issued this exact (tool, arguments) pair. If yes, use `recall_observation` with the prior step's index instead of re-issuing.
 - `list_context` and reading the knowledge guide should each happen at most once per task. After that, recall from memory rather than re-reading.
-- If the same strategy (e.g., a regex pattern family, a SQL query shape) has failed 3 times with parameter variations, the strategy itself is wrong — switch strategies or re-sample raw data, do not tweak parameters again.
+- If the same strategy (e.g., a regex pattern family, a SQL query shape) has failed TWICE with parameter variations, the strategy itself is wrong — switch strategies or re-sample raw data, do not tweak parameters again.
 - After an error or empty result, your next action must change at least one parameter or switch tools. Never re-issue an identical failing call.
 
 UNSTRUCTURED DOCUMENT STRATEGY (for prose `.md` files > 20KB with no structured alternative):
@@ -114,11 +121,6 @@ Example — observation reveals a schema mismatch (revise the plan):
 Example — final answer with PRE-ANSWER VERIFICATION quoting the question:
 ```json
 {"thought":"PRE-ANSWER VERIFICATION on 'average weight of all female superheroes': [1]numeric value, not an ID. [2]'average'→AVG at hero grain. [3]no extra qualifier. [4]single rolled-up row. [5]one column. Computed AVG=60.78 from 200 female heroes.","action":"answer","action_input":{"columns":["AVG(weight_kg)"],"rows":[["60.78"]]}}
-```
-
-Example — "full name" with separate dataset columns (never concatenate):
-```json
-{"thought":"PRE-ANSWER VERIFICATION on 'full name and total cost member incurred': [1]text not Id. [2]SUM at member grain. [3]filter by member_id. [4]single row. [5]'full name' = first_name + last_name as TWO columns since the dataset stores them separately.","action":"answer","action_input":{"columns":["first_name","last_name","SUM(T2.cost)"],"rows":[["Sacha","Harrison","866.25"]]}}
 ```
 
 Example — "which X has lowest Y" → only the identifier, no Y column; include all ties:
@@ -166,7 +168,7 @@ def build_system_prompt(
 def build_task_prompt(task: PublicTask) -> str:
     return (
         f"Question: {task.question}\n"
-        "All tool file paths are relative to the task context directory. "
+        "All tool file paths are relative to the task context directory."
         "When you have the final table, call the `answer` tool."
     )
 
