@@ -1,0 +1,612 @@
+{
+  "task_id": "task_408",
+  "answer": {
+    "columns": [
+      "percentage_faster"
+    ],
+    "rows": [
+      [
+        "0.32"
+      ]
+    ]
+  },
+  "steps": [
+    {
+      "step_index": 1,
+      "thought": "I need to find data about the 2008 Australian Grand Prix to compare the champion (winner) and last place driver's times. Let me start by exploring the context directory to understand what data files are available.",
+      "action": "list_context",
+      "action_input": {
+        "max_depth": 4
+      },
+      "raw_response": "\n\n```json\n{\"thought\":\"I need to find data about the 2008 Australian Grand Prix to compare the champion (winner) and last place driver's times. Let me start by exploring the context directory to understand what data files are available.\",\"plan\":\"1. List files in context directory\\n2. Look for race/grand prix data\\n3. Find the 2008 Australian GP results\\n4. Calculate percentage difference between champion and last place times\",\"action\":\"list_context\",\"action_input\":{\"max_depth\":4}}\n```",
+      "observation": {
+        "ok": true,
+        "tool": "list_context",
+        "content": {
+          "root": "/Users/hyeonseungkim/workspace/kddcup2026-blueshabu/data/public/input/task_408/context",
+          "entries": [
+            {
+              "path": "db",
+              "kind": "dir",
+              "size": null
+            },
+            {
+              "path": "db/results.db",
+              "kind": "file",
+              "size": 1007616
+            },
+            {
+              "path": "doc",
+              "kind": "dir",
+              "size": null
+            },
+            {
+              "path": "doc/races.md",
+              "kind": "file",
+              "size": 86259
+            },
+            {
+              "path": "knowledge.md",
+              "kind": "file",
+              "size": 6067
+            }
+          ]
+        }
+      },
+      "ok": true,
+      "plan": "1. List files in context directory\n2. Look for race/grand prix data\n3. Find the 2008 Australian GP results\n4. Calculate percentage difference between champion and last place times"
+    },
+    {
+      "step_index": 2,
+      "thought": "I found the context has a SQLite database (results.db) and documentation files. Let me inspect the database schema to understand the tables and columns available for race results.",
+      "action": "inspect_sqlite_schema",
+      "action_input": {
+        "path": "db/results.db"
+      },
+      "raw_response": "\n\n```json\n{\"thought\":\"I found the context has a SQLite database (results.db) and documentation files. Let me inspect the database schema to understand the tables and columns available for race results.\",\"plan\":\"1. Inspect SQLite schema\\n2. Read knowledge guide for context\\n3. Query 2008 Australian GP results\",\"action\":\"inspect_sqlite_schema\",\"action_input\":{\"path\":\"db/results.db\"}}\n```",
+      "observation": {
+        "ok": true,
+        "tool": "inspect_sqlite_schema",
+        "content": {
+          "path": "/Users/hyeonseungkim/workspace/kddcup2026-blueshabu/data/public/input/task_408/context/db/results.db",
+          "tables": [
+            {
+              "name": "results",
+              "create_sql": "CREATE TABLE results\n(\n    resultId        INTEGER\n        primary key autoincrement,\n    raceId          INTEGER default 0  not null,\n    driverId        INTEGER default 0  not null,\n    constructorId   INTEGER default 0  not null,\n    number          INTEGER,\n    grid            INTEGER default 0  not null,\n    position        INTEGER,\n    positionText    TEXT    default '' not null,\n    positionOrder   INTEGER default 0  not null,\n    points          REAL   default 0  not null,\n    laps            INTEGER default 0  not null,\n    time            TEXT,\n    milliseconds    INTEGER,\n    fastestLap      INTEGER,\n    rank            INTEGER default 0,\n    fastestLapTime  TEXT,\n    fastestLapSpeed TEXT,\n    statusId        INTEGER default 0  not null,\n    foreign key (raceId) references races(raceId),\n    foreign key (driverId) references drivers(driverId),\n    foreign key (constructorId) references constructors(constructorId),\n    foreign key (statusId) references status(statusId)\n)"
+            }
+          ]
+        }
+      },
+      "ok": true,
+      "plan": "1. Inspect SQLite schema\n2. Read knowledge guide for context\n3. Query 2008 Australian GP results"
+    },
+    {
+      "step_index": 3,
+      "thought": "I found the results table has raceId, driverId, position, time, milliseconds columns. I need to check for a races table to find the 2008 Australian GP and understand how to join results with race info.",
+      "action": "execute_context_sql",
+      "action_input": {
+        "path": "db/results.db",
+        "sql": "SELECT name FROM sqlite_master WHERE type='table'",
+        "limit": 20
+      },
+      "raw_response": "\n\n```json\n{\"thought\":\"I found the results table has raceId, driverId, position, time, milliseconds columns. I need to check for a races table to find the 2008 Australian GP and understand how to join results with race info.\",\"plan\":\"1. Check all tables in database (there might be a races table)\\n2. Read knowledge.md for schema details\\n3. Query 2008 Australian GP results\",\"action\":\"execute_context_sql\",\"action_input\":{\"path\":\"db/results.db\",\"sql\":\"SELECT name FROM sqlite_master WHERE type='table'\",\"limit\":20}}\n```",
+      "observation": {
+        "ok": true,
+        "tool": "execute_context_sql",
+        "content": {
+          "path": "/Users/hyeonseungkim/workspace/kddcup2026-blueshabu/data/public/input/task_408/context/db/results.db",
+          "columns": [
+            "name"
+          ],
+          "rows": [
+            [
+              "results"
+            ],
+            [
+              "sqlite_sequence"
+            ]
+          ],
+          "row_count": 2,
+          "truncated": false
+        }
+      },
+      "ok": true,
+      "plan": "1. Check all tables in database (there might be a races table)\n2. Read knowledge.md for schema details\n3. Query 2008 Australian GP results"
+    },
+    {
+      "step_index": 4,
+      "thought": "Only 'results' table exists. I need to check for race information - it might be in the documentation or there could be another table. Let me read the knowledge guide and races documentation.",
+      "action": "recall_observation",
+      "action_input": {
+        "step_index": 4
+      },
+      "raw_response": "\n\n```json\n{\"thought\":\"Only 'results' table exists. I need to check for race information - it might be in the documentation or there could be another table. Let me read the knowledge guide and races documentation.\",\"plan\":\"1. Read knowledge.md for schema details\\n2. Read races.md for race information\\n3. Query to find 2008 Australian GP data\",\"action\":\"recall_observation\",\"action_input\":{\"step_index\":4}}\n```",
+      "observation": {
+        "ok": false,
+        "tool": "recall_observation",
+        "content": {
+          "error": "No observation stored for step 4."
+        }
+      },
+      "ok": false,
+      "plan": "1. Read knowledge.md for schema details\n2. Read races.md for race information\n3. Query to find 2008 Australian GP data"
+    },
+    {
+      "step_index": 5,
+      "thought": "I need to check the knowledge guide and races.md for race information since only results table exists. Let me read these docs.",
+      "action": "read_doc",
+      "action_input": {
+        "path": "knowledge.md",
+        "max_chars": 10000
+      },
+      "raw_response": "\n\n```json\n{\"thought\":\"I need to check the knowledge guide and races.md for race information since only results table exists. Let me read these docs.\",\"plan\":\"1. Read knowledge.md for schema details\\n2. Read races.md for race information\\n3. Query to find 2008 Australian GP data\",\"action\":\"read_doc\",\"action_input\":{\"path\":\"knowledge.md\",\"max_chars\":10000}}\n```",
+      "observation": {
+        "ok": true,
+        "tool": "read_doc",
+        "content": {
+          "path": "knowledge.md",
+          "preview": "# Enterprise Data Governance Knowledge Guide for Database: Formula_1\n\n## 1. Introduction\nThis guide serves as a comprehensive semantic layer for the Formula_1 database, providing authoritative definitions, metric formulations, and governance standards. It is designed to ensure consistent data interpretation and usage across the enterprise, supporting strategic decision-making and operational efficiency.\n\n## 2. Core Entities & Fields\n\n### Business Entities\n- **Drivers**: Individuals participating in races, identified by `driverId`. Key attributes include `forename`, `surname`, `date of birth`, and `nationality`.\n- **Races**: Competitive events, identified by `raceId`. Attributes include `year`, `round`, `name`, and `date`.\n- **Circuits**: Locations where races are held, identified by `circuitId`. Attributes include `name`, `location`, `country`, and geographical coordinates (`latitude`, `longitude`).\n- **Constructors**: Teams responsible for car design and manufacturing, identified by `constructorId`. Attributes include `name`, `nationality`, and `url`.\n\n### Key Attributes\n- **driverRef**: A unique reference name for drivers, used for identification in various contexts.\n- **raceId**: A unique identifier for races, crucial for linking race-related data across tables.\n- **q1, q2, q3**: Qualifying period results, representing lap times in different qualifying sessions.\n- **fastestLapTime**: The quickest lap time recorded during a race, used to assess driver performance.\n- **points**: Scoring metric for drivers and constructors, reflecting performance in races.\n- **rank**: The driver's ranking within a race based on `fastestLapTime`; rank 1 indicates the driver who recorded the quickest lap time.\n\n## 3. Metric Definitions\n\n### Key Performance Indicators (KPIs)\n- **Driver Performance Index**: Calculated as the average of `points` scored by a driver across all races. Formula: `AVG(points)`.\n- **Constructor Success Rate**: Percentage of races where a constructor finishes in the top 3 positions. Formula: `DIVIDE(COUNT(raceId WHERE position <= 3), COUNT(raceId)) * 100`.\n- **Fastest Lap Efficiency**: Ratio of fastest lap times to total laps completed. Formula: `DIVIDE(SUM(fastestLapTime), SUM(laps))`.\n- **Race Completion Rate**: Percentage of races completed by drivers without disqualification. Formula: `DIVIDE(COUNT(raceId WHERE statusId != 2), COUNT(raceId)) * 100`.\n- **Qualifying Improvement Rate**: Change in qualifying times across sessions. Formula: `SUBTRACT(q3, q1)`.\n\n## 4. Constraints & Conventions\n\n### Filtering Criteria\n- **Temporal Boundaries**: Data is typically analyzed within calendar years, with fiscal year adjustments as needed.\n- **Currency Formatting**: Points and other numerical metrics are presented in integer or real formats, with no currency conversion required.\n- **Unit Conversion**: Time metrics are standardized to 'MM:SS.mmm' format for consistency.\n\n### Common Conventions\n- **Driver Identification**: Use `driverId` for unique identification; `driverRef` for reference in reports.\n- **Race Identification**: Use `raceId` for linking race data; `name` for descriptive purposes.\n\n## 5. Exemplar Use Cases\n\n### Example 1: Driver Elimination in Qualifying\n- **Metric**: Identify drivers eliminated in the first qualifying period for a specific race.\n- **Explanation**: For race number 20, list the reference names of drivers with the highest `q1` times, indicating elimination.\n- **SQL**: `SELECT T2.driverRef FROM qualifying AS T1 INNER JOIN drivers AS T2 ON T2.driverId = T1.driverId WHERE T1.raceId = 20 ORDER BY T1.q1 DESC LIMIT 5`\n\n### Example 2: Best Lap Time Analysis\n- **Metric**: Determine the driver with the best lap time in the second qualifying period.\n- **Explanation**: For race number 19, identify the driver with the minimum `q2` time.\n- **SQL**: `SELECT T2.surname FROM qualifying AS T1 INNER JOIN drivers AS T2 ON T2.driverId = T1.driverId WHERE T1.raceId = 19 ORDER BY T1.q2 ASC LIMIT 1`\n\n### Example 3: Circuit Location Identification\n- **Metric**: Retrieve geographical coordinates for specific Grand Prix events.\n- **Explanation**: For the Australian Grand Prix, extract latitude and longitude of the circuit.\n- **SQL**: `SELECT DISTINCT T1.lat, T1.lng FROM circuits AS T1 INNER JOIN races AS T2 ON T2.circuitID = T1.circuitId WHERE T2.name = 'Australian Grand Prix'`\n\n### Example 4: Driver Age Analysis\n- **Metric**: Identify the oldest driver who completed a specific race.\n- **Explanation**: For race number 592, find the driver with the earliest `dob` among those who finished the race.\n- **SQL**: `SELECT T1.forename, T1.surname FROM drivers AS T1 INNER JOIN results AS T2 ON T2.driverId = T1.driverId WHERE T2.raceId = 592 AND T2.time IS NOT NULL AND T1.dob IS NOT NULL ORDER BY T1.dob ASC LIMIT 1`\n\n### Example 5: Constructor Points Calculation\n- **Metric**: Calculate the maximum points scored by a constructor in a race.\n- **Explanation**: Determine the highest `points` value from `constructorResults` for a given race.\n- **SQL**: `SELECT MAX(points) FROM constructorResults WHERE raceId = [specific_raceId]`\n\n## 6. Ambiguity Resolution\n\n### Potentially Ambiguous Fields\n### Potentially Ambiguous Fields\n- **position vs. positionOrder**: Use `positionOrder` for final race rankings; `position` for grid or qualifying positions.\n- **time vs. milliseconds**: Use `milliseconds` for precise calculations; `time` for formatted display.\n- **driverRef vs. driverId**: Use `driverId` for unique identification; `driverRef` for reference in reports.\n- **rank vs. positionOrder**: Use `positionOrder` for final race finishing order; `rank` represents the driver's ranking based on `fastestLapTime` within a race, not the overall finishing position.\n\n### Recommended Usage\n- Prioritize `driverId` and `raceId` for linking data across tables.\n- Use `fastestLapTime` for performance metrics; `fastestLapSpeed` for speed analysis.\n\nThis guide ensures consistent and accurate data usage across the Formula_1 database, supporting enterprise-wide data governance and strategic insights.",
+          "truncated": false
+        }
+      },
+      "ok": true,
+      "plan": "1. Read knowledge.md for schema details\n2. Read races.md for race information\n3. Query to find 2008 Australian GP data"
+    },
+    {
+      "step_index": 6,
+      "thought": "The knowledge guide mentions races, drivers, circuits tables, but SQLite only shows results table. I need to check if there are other files or tables. Let me list all files in context and look for races info.",
+      "action": "list_context",
+      "action_input": {
+        "max_depth": 4
+      },
+      "raw_response": "\n\n```json\n{\"thought\":\"The knowledge guide mentions races, drivers, circuits tables, but SQLite only shows results table. I need to check if there are other files or tables. Let me list all files in context and look for races info.\",\"plan\":\"1. List all files in context to find race information\\n2. Query results table to find 2008 Australian GP\\n3. Calculate percentage difference between champion and last place\",\"action\":\"list_context\",\"action_input\":{\"max_depth\":4}}\n```",
+      "observation": {
+        "ok": true,
+        "tool": "list_context",
+        "content": {
+          "root": "/Users/hyeonseungkim/workspace/kddcup2026-blueshabu/data/public/input/task_408/context",
+          "entries": [
+            {
+              "path": "db",
+              "kind": "dir",
+              "size": null
+            },
+            {
+              "path": "db/results.db",
+              "kind": "file",
+              "size": 1007616
+            },
+            {
+              "path": "doc",
+              "kind": "dir",
+              "size": null
+            },
+            {
+              "path": "doc/races.md",
+              "kind": "file",
+              "size": 86259
+            },
+            {
+              "path": "knowledge.md",
+              "kind": "file",
+              "size": 6067
+            }
+          ]
+        }
+      },
+      "ok": true,
+      "plan": "1. List all files in context to find race information\n2. Query results table to find 2008 Australian GP\n3. Calculate percentage difference between champion and last place"
+    },
+    {
+      "step_index": 7,
+      "thought": "I found races.md file (86KB) which likely contains 2008 Australian GP information. Let me read it to find the race details.",
+      "action": "read_doc",
+      "action_input": {
+        "path": "doc/races.md",
+        "max_chars": 50000
+      },
+      "raw_response": "\n\n```json\n{\"thought\":\"I found races.md file (86KB) which likely contains 2008 Australian GP information. Let me read it to find the race details.\",\"plan\":\"1. Read races.md to find 2008 Australian GP raceId\\n2. Query results table for that raceId to get champion and last place times\\n3. Calculate percentage difference\",\"action\":\"read_doc\",\"action_input\":{\"path\":\"doc/races.md\",\"max_chars\":50000}}\n```",
+      "observation": {
+        "ok": true,
+        "tool": "read_doc",
+        "content": {
+          "path": "doc/races.md",
+          "preview": "### Official Steward's Summary: Chronological Race Event Verification\n\nThis document provides a formal and definitive summary of various Grand Prix events, ratifying their official designation and referencing their respective archival records. Each entry has been reviewed for accuracy against the official motorsport archives.\n\n---\n\nOfficial review of the event docketed as 7 confirms the final classification for the Turkish Grand Prix. This race was noted for its challenging multi-apex Turn 8, which placed significant stress on tire compounds throughout the weekend. The hospitality suites reportedly served a new menu that year, focusing on locally sourced Anatolian cuisine. The comprehensive race summary and historical context are archived for public review under the resource locator `http://en.wikipedia.org/wiki/2009_Turkish_Grand_Prix`.\n\nThe proceedings for race 18, the Australian Grand Prix, are now finalized. The event was characterized by a high rate of attrition, with multiple safety car periods significantly influencing the final outcome. Maintenance crews for the Albert Park circuit had completed a full resurfacing of the pit lane entry just weeks prior. A detailed chronology of incidents can be referenced at the official wiki entry: `http://en.wikipedia.org/wiki/2008_Australian_Grand_Prix`.\n\nRegarding the event registered under file number 27, the German Grand Prix, all results are hereby certified. Stewards paid close attention to track limit infringements at the final chicane, though no post-race penalties were ultimately applied. The pre-race driver parade featured several vintage cars from the Hockenheimring's own museum collection. The official encyclopedic record for this contest is maintained at `http://en.wikipedia.org/wiki/2008_German_Grand_Prix`.\n\nThe inquiry pertaining to event 29, the pan-continental contest designated as the European Grand Prix, has been concluded. Logistical challenges related to the street circuit's temporary infrastructure were a key point of discussion in the post-race debrief. The circuit's media center underwent a significant upgrade to its network cabling prior to the event weekend. The official chronicle of this Valencia-based race is available at `http://en.wikipedia.org/wiki/2008_European_Grand_Prix`.\n\nUnder docket 32, the results for the inaugural Singapore Grand Prix are officially ratified. As the first night race in the sport's history, extensive analysis was conducted on lighting consistency and driver visibility. The vendor responsible for trackside lighting was the same company that managed the airport's runway illumination. The complete event file is digitally archived at `http://en.wikipedia.org/wiki/2008_Singapore_Grand_Prix`.\n\nThe review of race file 34 confirms the final standings for the Chinese Grand Prix. The race proceeded without major incident, with team strategies largely dictated by forecasted changes in wind direction at the circuit's long back straight. A new public transportation link to the circuit had opened just months before, easing spectator access. The historical record for this event is located at `http://en.wikipedia.org/wiki/2008_Chinese_Grand_Prix`.\n\nThe event logged as 46, the Hungarian Grand Prix, has had its records formally sealed. While preliminary documentation erroneously listed this as a 2008 season event, a final audit confirmed its correct placement in the 2007 calendar. This particular race was held under extremely high ambient temperatures, affecting both car and driver performance. The paddock club's air conditioning system was noted in several team reports as performing below expectations. The corresponding event summary is hosted at `http://en.wikipedia.org/wiki/2007_Hungarian_Grand_Prix`.\n\nFor event 48, the Italian Grand Prix, the results are verified and entered into the official record. The unique low-downforce setup required for the Monza circuit led to several interesting strategic variations among the teams. A local artist was commissioned to create the trophies for the podium finishers that year. The official documentation can be accessed via `http://en.wikipedia.org/wiki/2007_Italian_Grand_Prix`.\n\nThe summary for race 73, the Bahrain Grand Prix, is hereby confirmed. This event was marked by concerns over sand blowing onto the track surface, requiring frequent track-clearing operations. The track's security team ran a full-scale emergency response drill the preceding Tuesday. The official encyclopedic entry for this race is found at `http://en.wikipedia.org/wiki/2005_Bahrain_Grand_Prix`.\n\nThe Teutonic contest held under docket 82, the German Grand Prix, has its results officially validated. Steward review focused on a pit lane incident during the second round of stops, but no penalties were ultimately deemed necessary. The circuit's official merchandise stores reported record sales of team-branded jackets, despite the warm weather. The official event record is archived at `http://en.wikipedia.org/wiki/2005_German_Grand_Prix`.\n\nRegarding race entry 83, the Hungarian Grand Prix, the final classification stands as recorded. The race was the first wet-weather running of this event in several years, which neutralized the typical performance advantages of several front-running teams. The broadcast graphics package for international viewers was updated for this race, featuring new telemetry data displays. The official summary is available for review at `http://en.wikipedia.org/wiki/2005_Hungarian_Grand_Prix`.\n\nThe event filed under registry number 91, the Malaysian Grand Prix, is certified complete. The high humidity and threat of sudden tropical downpours played a crucial role in tire strategy throughout the weekend. The circuit's drainage systems had been inspected and cleared the week before the event. The full race report is documented at `http://en.wikipedia.org/wiki/2004_Malaysian_Grand_Prix`.\n\nFor docket 96, the European Grand Prix, the results are now official. An initial clerical error listed the hosting circuit's ID as 95, but this was corrected to the proper identifier following a data integrity check. This race at the Nürburgring was pivotal in the mid-season championship battle. The press office was temporarily relocated due to renovations in the main administrative building. The official historical record is maintained at `http://en.wikipedia.org/wiki/2004_European_Grand_Prix`.\n\nThe event recorded as 97, the Canadian Grand Prix, has its classification confirmed. The race was notable for the degradation of the track surface, particularly at the hairpin, which led to numerous driver complaints. The famous groundhog that lives near the circuit was reportedly spotted several times by camera crews. The complete event summary can be found at `http://en.wikipedia.org/wiki/2004_Canadian_Grand_Prix`.\n\nThe results for race 101, the German Grand Prix, are hereby ratified. This event saw a dominant performance by a single team, leading to a largely processional race at the front of the field. The official program for the event included a retrospective on the career of a retiring local driver. The event's official record is located at `http://en.wikipedia.org/wiki/2004_German_Grand_Prix`.\n\nThe Shanghai-based event, registered as race 105 and titled the Chinese Grand Prix, has its results certified. This was the inaugural running of the race, and its inclusion in the calendar was seen as a significant milestone for the sport's global expansion. The ceremonial dragon dance performed during the pre-race grid show was a highlight for many attendees. The official archival information is available at `http://en.wikipedia.org/wiki/2004_Chinese_Grand_Prix`.\n\nRegarding event 106, the Japanese Grand Prix, the final classification is confirmed. The weekend schedule was significantly disrupted by a typhoon, forcing qualifying to be held on Sunday morning just hours before the race. Teams had to reinforce their garage structures to withstand the high winds. The official summary of this dramatic event is archived at `http://en.wikipedia.org/wiki/2004_Japanese_Grand_Prix`.\n\nThe summary for race 116, the European Grand Prix, is now sealed. Steward scrutiny was applied to several instances of aggressive defending in the midfield, with one driver receiving a formal warning. The circuit's medical center treated a small number of spectators for heat exhaustion. The historical record for the event can be accessed at `http://en.wikipedia.org/wiki/2003_European_Grand_Prix`.\n\nFor docket 129, the Austrian Grand Prix, the results are finalized. Initial timetables suggested a Saturday start time of 13:00, but this was later amended in the final regulations to the official 14:00 start. The event was highly controversial due to the implementation of team orders in the final laps, which overshadowed the on-track action. The Alpine meadows surrounding the circuit were in full bloom, providing a scenic backdrop. The official chronicle is maintained at `http://en.wikipedia.org/wiki/2002_Austrian_Grand_Prix`.\n\nThe race filed under number 144, the San Marino Grand Prix, has its results verified. Held at the Imola circuit, this race was a tactical battle of fuel loads and pit stop timing. The local carabinieri managed traffic flow outside the circuit with notable efficiency. The complete event file is documented at `http://en.wikipedia.org/wiki/2001_San_Marino_Grand_Prix`.\n\nEvent 161, the British Grand Prix, is hereby certified. The race was notable for being held in April, where it was beset by torrential rain, causing logistical chaos with flooded car parks and access roads. The catering service for the media center received praise for its consistent supply of hot beverages. The official summary is located at `http://en.wikipedia.org/wiki/2000_British_Grand_Prix`.\n\nThe North American leg of the championship, docketed as 165 and known as the Canadian Grand Prix, has its results confirmed. The Circuit Gilles Villeneuve's infamous \"Wall of Champions\" claimed another high-profile victim during this running of the event. A local university's engineering department had a display in the fan zone showcasing their student racing project. The official record can be referenced at `http://en.wikipedia.org/wiki/2000_Canadian_Grand_Prix`.\n\nThe results for race 168, the German Grand Prix, are ratified. The event was thrown into disarray by a sudden downpour on one part of the long Hockenheimring circuit while other parts remained dry, leading to a chaotic and unpredictable outcome. The track marshals were commended for their rapid response to several on-track incidents. The encyclopedic entry is available at `http://en.wikipedia.org/wiki/2000_German_Grand_Prix`.\n\nThe inquiry for event 198, the French Grand Prix, is officially closed. This race at Magny-Cours was a strategic masterclass in tire preservation, with the winner running a longer-than-expected final stint. The circuit's administrative staff had recently completed a team-building retreat the month prior. The historical data for the race is archived at `http://en.wikipedia.org/wiki/1998_French_Grand_Prix`.\n\nRegarding docket 205, the Luxembourg Grand Prix, the final classification is verified. Held at the Nürburgring, this event was pivotal in deciding the outcome of the drivers' championship that year. The track's gift shop sold out of a limited-edition scale model of the circuit. The official event summary is maintained at `http://en.wikipedia.org/wiki/1998_Luxembourg_Grand_Prix`.\n\nThe results for race 216, the German Grand Prix, are confirmed. The event was marked by high mechanical attrition, with several front-runners retiring due to engine-related issues. The library in the nearby town of Hockenheim had a small exhibit on the history of the race. The full race record is located at `http://en.wikipedia.org/wiki/1997_German_Grand_Prix`.\n\nEvent 222, the Japanese Grand Prix, has its results certified. The championship implications of this race led to intense scrutiny of on-track etiquette and several post-race appeals to the stewards. The Suzuka circuit's famous Ferris wheel was reportedly operating at full capacity throughout the weekend. The official chronicle of this event can be found at `http://en.wikipedia.org/wiki/1997_Japanese_Grand_Prix`.\n\nThe classification for race 225, the Brazilian Grand Prix, is hereby ratified. The unpredictable weather at Interlagos once again played a deciding role, with a mid-race shower shuffling the running order completely. A new water-recycling system had been installed in the paddock facilities earlier that year. The official summary is archived at `http://en.wikipedia.org/wiki/1996_Brazilian_Grand_Prix`.\n\nFor event 227, the European Grand Prix, the records are sealed. Preliminary schedules had this pegged as the fifth round of the season, but final calendar ratification placed it as the fourth round. This race was a showcase of wet-weather driving skill. The new curb profiles at the chicane were a topic of much discussion in the drivers' briefing. The official event documentation is available at `http://en.wikipedia.org/wiki/1996_European_Grand_Prix`.\n\nFinally, the review of docket 230, the Spanish Grand Prix, is complete, and its results are certified. The race is remembered as an absolute masterclass in wet-weather driving by the eventual winner, who lapped nearly the entire field in treacherous conditions. The circuit had recently passed its annual safety inspection with no major issues noted. The historical record for this remarkable race is maintained at `http://en.wikipedia.org/wiki/1996_Spanish_Grand_Prix`.\n\n---\n\nThe chronological audit of race events continues with the following entries, each having been subjected to a full review of its classification and historical documentation.\n\nThe review of event docket 235 confirms the final classification for the Hungarian Grand Prix. This particular race was held under clear skies and high temperatures, leading to a focus on thermal management of the tires. The paddock's electrical grid was reportedly under strain due to the teams' high demand for cooling equipment. The complete race summary is archived for public review under the resource locator `http://en.wikipedia.org/wiki/1996_Hungarian_Grand_Prix`.\n\nThe proceedings for race 240, the Brazilian Grand Prix, are now finalized. The event at Interlagos was characterized by a dramatic first-lap incident that necessitated a full race restart. The circuit's landscaping team had planted a new row of jacaranda trees along the main access road that spring. A detailed chronology of events is available for reference at `http://en.wikipedia.org/wiki/1995_Brazilian_Grand_Prix`.\n\nTurning to the file for event 252, the stewards confirm the results for the Portuguese Grand Prix. The Estoril circuit's variable grip levels were a major talking point among the drivers. A local artist was commissioned to paint a mural on the main grandstand, which was unveiled during the pre-race ceremonies. A comprehensive chronicle of the event is maintained within the digital encyclopedia, accessible by searching for the '1995 Portuguese Grand Prix' article.\n\nThe inquiry pertaining to event 272, the Australian Grand Prix, has concluded with results certified. This race, held in Adelaide, was the scene of a controversial championship-deciding collision. The city's tram service offered free rides to all ticket holders during the race weekend. The official chronicle is available at `http://en.wikipedia.org/wiki/1994_Australian_Grand_Prix`.\n\nUnder docket 283, the results for the contest held at the Hungaroring, officially designated the Hungarian Grand Prix, are ratified. This event was a tactical duel, with pit stop strategy proving more critical than outright pace. The circuit's contract with its official timekeeping partner was renewed for another five years following the event. The full event file is digitally archived at `http://en.wikipedia.org/wiki/1993_Hungarian_Grand_Prix`.\n\nThe review of race file 286 confirms the final standings for the Portuguese Grand Prix. The race is remembered for a high-speed pit lane incident that subsequently led to the introduction of mandatory speed limits. The vendor supplying the teams' radio communication systems reported no major faults during the weekend. The historical record for this event is located at `http://en.wikipedia.org/wiki/1993_Portuguese_Grand_Prix`.\n\nThe event logged as 298, the German Grand Prix, has had its records formally sealed. The long forest straights of the old Hockenheimring layout placed a premium on engine power and reliability. The on-site fire marshals conducted a full-scale training exercise on the Thursday prior to the event. The corresponding event summary is hosted on the public wiki platform under the article titled \"1992 German Grand Prix\".\n\nFor event 302, the Portuguese Grand Prix, the results are verified and entered into the official record. The race was marked by a dramatic late-race engine failure for the long-time leader. A new brand of mineral water was introduced in the hospitality suites, sourced from the nearby Sintra mountains. The official documentation can be accessed via `http://en.wikipedia.org/wiki/1992_Portuguese_Grand_Prix`.\n\nThe docket for 346, the British Grand Prix, is now closed. An early draft of the race report incorrectly listed the year as 2009, based on a clerical error; this has been formally corrected to reflect its proper place in the 2010 season. This event marked the debut of the new 'Arena' circuit layout at Silverstone, which received mixed reviews from competitors. The organizing committee had also invested in a new public address system for the fan zones. The official summary is available at `http://en.wikipedia.org/wiki/2010_British_Grand_Prix`.\n\nThe summary for race 350, the Italian Grand Prix, is hereby confirmed. As is tradition at Monza, the race was the fastest of the season, with teams running minimal downforce configurations. The post-race track invasion by the Tifosi was noted in the security debrief as being particularly enthusiastic. The official record for this race is found at `http://en.wikipedia.org/wiki/2010_Italian_Grand_Prix`.\n\nThe results for the Interlagos-based event registered as 354, the Brazilian Grand Prix, are officially validated. This penultimate race of the season was critical in the championship fight, with team orders playing a significant and controversial role. The circuit's drainage system was tested by a brief but intense downpour during the morning warm-up session. The official event record is archived at `http://en.wikipedia.org/wiki/2010_Brazilian_Grand_Prix`.\n\nRegarding race entry 365, the Hungarian Grand Prix, the final classification stands as recorded. The race was held during a period of significant political change in the region, adding a unique historical backdrop to the event. The official event photographer had to replace a primary lens after an unfortunate incident in the pit lane. The official summary is available for review at `http://en.wikipedia.org/wiki/1989_Hungarian_Grand_Prix`.\n\nFor docket 369, the contest held at the Jerez circuit in the Iberian peninsula, known as the Spanish Grand Prix, has its results finalized. This race was characterized by extreme tire wear on the abrasive track surface. The local tourism board set up a promotional stand in the fan village showcasing Andalusian culture. The historical data for this event is cataloged in the online encyclopedia under an article corresponding to the race name and its 1989 running.\n\nThe event recorded as 372, the Brazilian Grand Prix, has its classification confirmed. The race was the first of the season and marked the debut of several new technical regulations. The trophy designs for this year were inspired by the architecture of Oscar Niemeyer. The complete event summary can be found at `http://en.wikipedia.org/wiki/1988_Brazilian_Grand_Prix`.\n\nThe results for race 375, the Mexican Grand Prix, are hereby ratified. The high altitude of the Mexico City circuit posed a unique challenge for the turbocharged engines of the era. A local mariachi band performed on the grid before the race, a tradition that was well-received by teams and fans. The event's official record is located at `http://en.wikipedia.org/wiki/1988_Mexican_Grand_Prix`.\n\nThe event registered as 381, the contest held behind the former Iron Curtain and designated the Hungarian Grand Prix, has its results certified. The tight and twisty nature of the Hungaroring led to a processional race with very few on-track overtakes. The circuit's souvenir shops reported that miniature models of the safety car were their best-selling item. The official archival information is available at `http://en.wikipedia.org/wiki/1988_Hungarian_Grand_Prix`.\n\nRegarding event 389, the San Marino Grand Prix, the final classification is confirmed. The race at Imola was dominated by a single team, highlighting a significant performance gap to the rest of the field. The track's medical helicopter was briefly grounded due to fog on Saturday morning but was cleared for service before any official sessions. The official summary is archived at `http://en.wikipedia.org/wiki/1987_San_Marino_Grand_Prix`.\n\nThe summary for race 391, the prestigious event held in the principality on the Côte d'Azur, known as the Monaco Grand Prix, is now sealed. This race is famous for a commanding performance by a driver who ultimately crashed out of a dominant lead. The yacht harbor adjacent to the circuit was at full capacity, with an extensive waiting list for berths. The historical record for the event can be accessed at `http://en.wikipedia.org/wiki/1987_Monaco_Grand_Prix`.\n\nFor docket 431, the Italian Grand Prix, the results are finalized. The event was the final European race of the season and saw a popular home victory. The circuit's historic banking was closed to the public for the weekend due to minor structural concerns. The complete event file is documented at `http://en.wikipedia.org/wiki/1985_Italian_Grand_Prix`.\n\nThe race filed under number 434, the South African Grand Prix, has its results verified. The race at the Kyalami circuit was held under a cloud of political controversy, leading to a boycott by several teams. The track's catering staff prepared over 5,000 boerewors rolls for spectators over the weekend. A full report on this event can be found by navigating to the relevant article for the 1985 race on Wikipedia.\n\nEvent 461, the German Grand Prix, is hereby certified. A multi-car pile-up at the start led to a lengthy delay and a complete restart of the race. The weather radar system used by race control had been upgraded just prior to the season's start. The official summary is located at `http://en.wikipedia.org/wiki/1983_German_Grand_Prix`.\n\nThe event docketed as 466, the South African Grand Prix, has its results confirmed. As the final race of the season, it hosted a tense, championship-deciding battle between two rival drivers. The track's broadcast compound required an additional generator to power the new onboard camera technologies being trialed. The official record can be referenced at `http://en.wikipedia.org/wiki/1983_South_African_Grand_Prix`.\n\nThe results for race 472, the glamorous street race known as the Monaco Grand Prix, are ratified. The race ended in bizarre fashion, with multiple leaders crashing or running out of fuel in the closing laps on a rain-soaked track. The casino adjacent to the hairpin corner reported a significant increase in patronage that weekend. The encyclopedic entry is available at `http://en.wikipedia.org/wiki/1982_Monaco_Grand_Prix`.\n\nThe inquiry for event 519, the French Grand Prix, is officially closed. The race at Dijon-Prenois is legendary for a thrilling, wheel-banging duel for second place in the final laps. The local gendarmerie praised the orderly conduct of the visiting fans. The historical data for the race is archived at `http://en.wikipedia.org/wiki/1979_French_Grand_Prix`.\n\nRegarding docket 551, the French Grand Prix, the final classification is verified. This event marked the debut of a revolutionary new turbocharged engine, which showed impressive speed but lacked reliability. The hay bales used as safety barriers in previous years had been fully replaced by guardrails at this circuit. The official event summary is maintained at `http://en.wikipedia.org/wiki/1977_French_Grand_Prix`.\n\nThe results for race 560, the Brazilian Grand Prix, are confirmed. A home driver secured a popular victory in front of a passionate Interlagos crowd. The track's timing and scoring system experienced a minor glitch during the first practice session but was resolved before qualifying. The full race record is located at `http://en.wikipedia.org/wiki/1976_Brazilian_Grand_Prix`.\n\nEvent 567, the French Grand Prix, has its results certified. The race was run in scorching summer heat, leading to high rates of driver fatigue and mechanical failure. The circuit's water pressure was reportedly low in some of the paddock hospitality units. The official chronicle of this event can be found at `http://en.wikipedia.org/wiki/1976_French_Grand_Prix`.\n\nThe classification for race 576, the Argentine Grand Prix, is hereby ratified. The season-opening race was held at the Buenos Aires circuit and saw a surprise winner after the pre-race favorites encountered issues. A new shipment of official event merchandise was delayed in customs and did not arrive until Saturday morning. The official summary is archived at `http://en.wikipedia.org/wiki/1975_Argentine_Grand_Prix`.\n\nFor event 593, the race held on the Iberian peninsula and designated the Spanish Grand Prix, the records are sealed. The race at the Montjuïc street circuit was tragically marred by a serious accident, leading to its stoppage and the awarding of half points. The circuit's safety inspections were a major point of contention before the event. The official event documentation, detailing this somber race, is available for review within the online encyclopedia's article for the 1974 running.\n\nFinally, the review of docket 605, the Argentine Grand Prix, is complete, and its results are certified. The race was characterized by rapidly changing weather conditions, which caught out several experienced drivers. The press room was noted for its excellent coffee, supplied by a local roaster. The historical record for this race is maintained at `http://en.wikipedia.org/wiki/1973_Argentine_Grand_Prix`.\n\n---\n\nThe official audit continues, delving further into the historical archives to ratify the results and records of past championship events.\n\nThe review of event docket 606 confirms the final classification for the Brazilian Grand Prix. This race, held at the historic Interlagos circuit, was the first time the event was included as a point-scoring round of the World Championship. The circuit's press office had recently installed new telex machines to improve communication with international media. The complete race summary is archived for public review under the resource locator `http://en.wikipedia.org/wiki/1973_Brazilian_Grand_Prix`.\n\nThe proceedings for race 618, the Canadian Grand Prix, are now finalized. This event is famously remembered for the first-ever deployment of a Safety Car in the sport's history, which caused considerable confusion in scoring. The driver of the safety car was a local racing instructor who owned a nearby driving school. A detailed chronicle of this historic race is maintained on the public wiki, accessible via the article titled \"1973 Canadian Grand Prix\".\n\nRegarding the event registered under file number 620, the Argentine Grand Prix, all results are hereby certified. The race was run in intense summer heat, leading to significant driver fatigue and a high rate of mechanical attrition. The local organizers had arranged for a fly-past by the Argentine Air Force acrobatic team before the start. The official encyclopedic record for this contest is maintained at `http://en.wikipedia.org/wiki/1972_Argentine_Grand_Prix`.\n\nThe inquiry pertaining to event 635, the race held at Zandvoort known as the Dutch Grand Prix, has been concluded. The race saw the return of the event to the calendar after a one-year hiatus. The circuit's famous sand dunes were noted to have shifted slightly over the winter, altering some of the spectator viewing angles. The official chronicle of this race is available at `http://en.wikipedia.org/wiki/1971_Dutch_Grand_Prix`.\n\nUnder docket 645, the results for the prestigious event in the principality, the Monaco Grand Prix, are officially ratified. The race was notable for its dramatic conclusion, with the leader running out of fuel on the very last corner. The organizers had recently resurfaced the section of track through the tunnel, improving both grip and lighting. The complete event file is digitally archived at `http://en.wikipedia.org/wiki/1970_Monaco_Grand_Prix`.\n\nThe review of race file 652 confirms the final standings for the Italian Grand Prix. This event at Monza produced the closest finish in the sport's history, with the top five cars separated by mere hundredths of a second. The circuit's groundskeepers had won a local award for their maintenance of the Royal Villa of Monza's gardens. The historical record for this thrilling contest is cataloged on the public wiki under the \"1970 Italian Grand Prix\" article.\n\nThe event logged as 656, the South African Grand Prix, has had its records formally sealed. Initial documentation had this race incorrectly logged in the 1970 season file; a final audit has corrected this to its proper 1969 calendar placement. The race marked the debut of prominent high wings on the cars, a major aerodynamic innovation. The local wildlife near the Kyalami circuit was reportedly undisturbed by the event. The corresponding event summary is hosted at `http://en.wikipedia.org/wiki/1969_South_African_Grand_Prix`.\n\nFor event 667, the South African Grand Prix, the results are verified and entered into the official record. The race was a tribute to a recently deceased champion, adding a somber tone to the season opener. The official race program included a special commemorative section with photos from the driver's career. The official documentation can be accessed via `http://en.wikipedia.org/wiki/1968_South_African_Grand_Prix`.\n\nThe summary for race 679, the South African Grand Prix, is hereby confirmed. The event featured a stunning victory for a privateer team in a custom-built chassis, a rare feat in that era. The team's celebratory dinner was held at a well-known steakhouse in Johannesburg. The official encyclopedic entry for this race can be located by searching for the \"1967 South African Grand Prix\" article on Wikipedia.\n\nThe North American contest at Watkins Glen, docketed as 688 and officially the United States Grand Prix, has its results officially validated. This race was instrumental in the conclusion of a very closely fought championship battle. The autumn foliage in the surrounding Finger Lakes region was reported to be at its peak, providing a stunning visual backdrop. The official event record is archived at `http://en.wikipedia.org/wiki/1967_United_States_Grand_Prix`.\n\nRegarding race entry 694, the Dutch Grand Prix, the final classification stands as recorded. The race was run on a damp and treacherous track, rewarding drivers with exceptional car control. The circuit's on-site cafeteria was famous among teams for its freshly made stroopwafels. The official summary is available for review at `http://en.wikipedia.org/wiki/1966_Dutch_Grand_Prix`.\n\nThe event filed under registry number 716, the Italian Grand Prix, is certified complete. The race was a crucial moment in the championship, with a home victory for the dominant Ferrari team. The bells of the nearby Monza Cathedral could reportedly be heard during lulls in the engine noise. The full race report is documented within the online encyclopedia's entry for the 1964 running of the event.\n\nFor docket 720, the contest at the formidable Spa-Francorchamps circuit, known as the Belgian Grand Prix, the results are now official. The race was run at incredible average speeds on the notoriously dangerous public road course. The local authorities had to close several farm access roads to secure the circuit perimeter. The official historical record is maintained at `http://en.wikipedia.org/wiki/1963_Belgian_Grand_Prix`.\n\nThe event recorded as 723, the British Grand Prix, has its classification confirmed. The race at Silverstone was won by a legendary British driver in a British car, to the delight of the home crowd. The Royal Automobile Club hosted a gala dinner in London following the event. The complete event summary can be found at `http://en.wikipedia.org/wiki/1963_British_Grand_Prix`.\n\nThe results for race 735, the Italian Grand Prix, are hereby ratified. While preliminary logbooks listed this as the seventh round of the season, a final audit confirmed its correct status as the eighth round. This race clinched the championship for the eventual winner. The olive groves bordering the Lesmo corners were in the middle of their harvest season. The event's official record is located at `http://en.wikipedia.org/wiki/1962_Italian_Grand_Prix`.\n\nThe event registered as 749, the Dutch Grand Prix, has its results certified. The race is sadly remembered for a fatal accident involving a spectator. The circuit's safety protocols were reviewed and updated in the aftermath of the incident. The official archival information for this tragic event is available for review on the public wiki under the article for the 1960 race.\n\nRegarding event 756, the race on the streets of Monte Carlo known as the Monaco Grand Prix, the final classification is confirmed. The race was an attritional affair, with very few cars making it to the finish line. The royal family of Monaco was in attendance, presenting the trophies on the podium. The official summary is archived at `http://en.wikipedia.org/wiki/1959_Monaco_Grand_Prix`.\n\nThe summary for race 760, the British Grand Prix, is now sealed. The race was held at the Aintree circuit, which uniquely ran inside the famous horse racing track. The on-site betting shops were doing a brisk trade on both the car race and the horse races scheduled for the following week. The historical record for the event can be accessed at `http://en.wikipedia.org/wiki/1959_British_Grand_Prix`.\n\nFor docket 761, the German Grand Prix, the results are finalized. The race was held on the high-speed AVUS track in Berlin, which featured a dangerously steep banked corner. The track's concrete surface was noted for being extremely abrasive on tires. The full event file is documented in the online encyclopedia's entry for the 1959 German race.\n\nThe race filed under number 779, the French Grand Prix, has its results verified. The event was held on the Rouen-Les-Essarts public road circuit, a fast and challenging course. A local cheese vendor set up a popular stall in the paddock, offering samples of Camembert and Brie. The complete event file is documented at `http://en.wikipedia.org/wiki/1957_French_Grand_Prix`.\n\nEvent 783, the Italian Grand Prix, is hereby certified. This race was held on the combined road and oval course at Monza, which was notoriously bumpy and hard on the cars' suspensions. A number of teams had to perform emergency welding repairs on their chassis overnight. The official summary of this grueling race is available for public review on Wikipedia, under the article for the 1957 event.\n\nThe event docketed as 793, the Monaco Grand Prix, has its results confirmed. The race is infamous for a crash that saw a car plunge into the harbor, though the driver escaped unharmed. The harbor's dive team had recently completed their annual training exercises. The official record can be referenced at `http://en.wikipedia.org/wiki/1955_Monaco_Grand_Prix`.\n\nThe results for race 827, the race in the Ardennes forest known as the Belgian Grand Prix, are ratified. The race was dominated by a single manufacturer, showcasing their technical superiority on the high-speed Spa circuit. The weather was unusually sunny and clear for the region, which is typically known for rain. The encyclopedic entry is available at `http://en.wikipedia.org/wiki/1951_Belgian_Grand_Prix`.\n\nThe inquiry for event 828, the French Grand Prix, is officially closed. This race featured the first-ever shared victory in championship history, with two drivers splitting the points for first place after swapping cars mid-race. The official timekeepers had to manually verify the final classification due to the unique circumstances. The historical data for the race is archived at `http://en.wikipedia.org/wiki/1951_French_Grand_Prix`.\n\nRegarding docket 830, the German Grand Prix, the final classification is verified. This was the first time the German Grand Prix was held as a World Championship event, run on the formidable Nürburgring Nordschleife. The circuit's many concession stands struggled to keep up with demand for bratwurst and beer. The official event summary is maintained within the digital encyclopedia's article for the 1951 German race.\n\nThe results for race 852, the Belgian Grand Prix, are confirmed. The race was affected by intermittent rain showers, making tire choice a critical and difficult decision for all teams. The local chocolate shops in nearby Spa did a roaring trade with team personnel and fans. The full race record is located at `http://en.wikipedia.org/wiki/2011_Belgian_Grand_Prix`.\n\nEvent 857, the Indian Grand Prix, has its results certified. This was the inaugural running of the event at the brand-new Buddh International Circuit. The organizers were praised for the circuit's modern facilities and efficient organization, though the air quality was a concern. The official chronicle of this event can be found at `http://en.wikipedia.org/wiki/2011_Indian_Grand_Prix`.\n\nThe classification for race 870, the Hungarian Grand Prix, is hereby ratified. The race was held in typically hot summer conditions, with track temperatures exceeding 50 degrees Celsius. The circuit had recently installed a new, more efficient system for collecting rainwater for track cleaning. The official summary is archived on the public wiki under the article \"2012 Hungarian Grand Prix\".\n\nFor event 878, the United States Grand Prix, the records are sealed. This race marked the sport's return to the US at the newly constructed Circuit of the Americas in Austin, Texas. The pre-race concert series featured several well-known local musicians. The official event documentation is available at `http://en.wikipedia.org/wiki/2012_United_States_Grand_Prix`.\n\nFinally, the review of docket 885, the Monaco Grand Prix, is complete, and its results are certified. The race was notable for two significant accidents that required red flag stoppages to clear the track and repair barriers. The repair crews were commended for their speed and efficiency. The historical record for this dramatic race is maintained on the public wiki platform, accessible by navigating to the \"2013 Monaco Grand Prix\" article.\n\n---\n\nThe final segment of this archival review concludes with the verification of events from the modern hybrid era, ensuring a complete and accurate record up to the specified date.\n\nThe review of event docket 891 confirms the final classification for the Belgian Grand Prix. The race at Spa-Francorchamps was held in cool and overcast conditions, but the forecasted rain never materialized, leading to a straightforward strategic race. The organizers had recently installed new high-definition information screens for spectators at key corners. The complete race summary is archived for public review under the resource locator `http://en.wikipedia.org/wiki/2013_Belgian_Grand_Prix`.\n\nThe proceedings for race 894, the Korean Grand Prix, are now finalized. This event was notable for significant tire degradation issues and an unusual incident involving a fire vehicle being deployed on a live track. The circuit's location in a remote, developing area presented logistical challenges for teams and media. A detailed chronology of events is available for reference at `http://en.wikipedia.org/wiki/2013_Korean_Grand_Prix`.\n\nRegarding the event registered under file number 917, the contest held at the Interlagos circuit in São Paulo, all results are hereby certified. The race featured a tense battle for the win, which was ultimately decided by superior tire management in the final stint. The local organizers arranged a Samba band performance in the paddock, which was a popular attraction. The full report is documented within the online encyclopedia's entry for the 2014 running of this South American event.\n\nThe inquiry pertaining to event 933, the Austrian Grand Prix, has been concluded. This race marked the return of the Austrian event to the championship calendar at the refurbished Red Bull Ring. The circuit's owners had invested heavily in modernizing the pit and paddock facilities. The official chronicle of this race is available at `http://en.wikipedia.org/wiki/2015_Austrian_Grand_Prix`.\n\nUnder docket 941, the results for the inaugural race held in the Sochi Olympic Park are officially ratified. The event took place shortly after the Winter Olympics, utilizing the park's infrastructure. Scrutiny was placed on the new, smooth track surface, which produced very low levels of tire wear. The official encyclopedic entry can be located by searching for the '2015 Russian Grand Prix' article on Wikipedia.\n\nThe review of race file 953 confirms the final standings for the Monaco Grand Prix. The race was won in dramatic fashion after a strategic error during a late safety car period cost the long-time leader a certain victory. The harbor was filled with an exceptional number of superyachts, even by Monaco's standards. The historical record for this event is located at `https://en.wikipedia.org/wiki/2016_Monaco_Grand_Prix`.\n\nThe event logged as 967, the penultimate round of the season held in São Paulo, has had its records formally sealed. The race was run in torrential rain, leading to multiple red flags, safety car periods, and a showcase of exceptional wet-weather driving from several competitors. The circuit's drainage system was pushed to its absolute limit throughout the day. The historical data for this race is cataloged in the online encyclopedia under an article corresponding to the race name and its 2016 running.\n\nFor event 972, the Russian Grand Prix, the results are verified and entered into the official record. The race saw a driver claim his maiden career victory after starting from the front row. The circuit's turnstiles had been upgraded with a new contactless ticketing system prior to the event. The official documentation can be accessed via `https://en.wikipedia.org/wiki/2017_Russian_Grand_Prix`.\n\nThe summary for race 975, the Canadian Grand Prix, is hereby confirmed. The event was dominated by a single driver, who tied a historical record for pole positions at the circuit that weekend. The city of Montreal hosted its usual array of fan festivals and street parties, contributing to the event's celebrated atmosphere. The official encyclopedic entry for this race is found at `https://en.wikipedia.org/wiki/2017_Canadian_Grand_Prix`.\n\nFinally, the results for the event docketed as 979, the Hungarian Grand Prix, are officially validated. The race was a strategic affair, with the lead team using one car to defend the position of its teammate, who was nursing a car issue. The paddock club served a record number of goulash portions over the four-day event. The official event record is archived at `https://en.wikipedia.org/wiki/2017_Hungarian_Grand_Prix`.\n\n### Addendum: Temporal Data Ratification\n\nThis section augments the preceding event summaries with officially verified temporal data. Each entry has been cross-referenced with the official FIA calendars and timing sheets to confirm the championship year, event date, and scheduled race commencement time.\n\n---\n\nFurther review of the event docketed as 7 confirms its place in the 2009 championship season. The race was held on the seventh day of June, with official proceedings commencing at 12:00:00 local time. The weather forecast for the weekend had predicted a high chance of rain, but the race itself remained dry. The circuit's main access road was temporarily closed that morning due to a non-race-related traffic incident.\n\nThe temporal data for race 18 has been fully verified. This event was a fixture of the 2008 season, taking place on March 16th. While preliminary schedules had indicated a 05:00:00 start, the official commencement time was adjusted and finalized at 04:30:00 local time to accommodate global broadcast windows. This early start required teams to adjust their standard pre-race preparation schedules significantly.\n\nRegarding event 27, the records confirm it was part of the 2008 championship tour, held on July 20th. The official start time was logged as 12:00:00. The ambient temperature at the start of the race was recorded at a pleasant 24 degrees Celsius.\n\nThe race registered under file number 29 also occurred during the 2008 season. The event took place on the twenty-fourth day of August, with the race starting precisely at 12:00:00 local time. The organizers had arranged for a local symphony orchestra to play the national anthem on the grid.\n\nFor event 32, the timeline is now certified. While provisional calendars had floated a date of September 21st, the finalized schedule confirmed the race took place on September 28th, 2008. The official start time was recorded as 12:00:00. The extensive lighting systems for this night race underwent a final, full-power systems check the evening prior.\n\nThe review of event 34 places it in the latter half of the 2008 season, on October 19th. The race commenced at 07:00:00 local time. The freight logistics for the teams were particularly complex, involving a tight turnaround from the preceding event.\n\nThe inquiry for docket 46 confirms its position in the 2007 season. The race was contested on the fifth of August, with a standard European start time of 12:00:00. The high track temperatures were a major topic of discussion in the pre-race engineering briefings.\n\nThe temporal data for event 48 is ratified. The race was part of the 2007 championship, held on September 9th, with a scheduled start time of 12:00:00. A number of teams trialed new brake cooling ducts specifically for this high-speed event.\n\nFor race 73, the scheduling is confirmed as April 3rd of the 2005 season. The start time, which was initially published as 14:00:00, was officially adjusted in the final event regulations to 14:30:00. This change was made to extend the pre-race grid ceremonies.\n\nThe event docketed as 82 took place on July 24, 2005. The race commenced two hours past midday, at 14:00:00. The circuit's official merchandise stores reported that sales of rain ponchos were high, despite the race being held in dry conditions.\n\nRegarding entry 83, this event was held one week later, on July 31st, 2005, with a start time of 14:00:00. The back-to-back scheduling placed significant operational strain on the teams' transport and logistics departments.\n\nThe timeline for race 91 places it on March 21st of the 2004 championship season. The official race start time is not specified in the summary data file, though records indicate it followed the standard afternoon schedule for the region. The humidity levels that day were noted as being exceptionally high.\n\nFor event 96, the date is confirmed as May 30th during the 2004 season. A specific commencement time is not on record in this particular log, though it adhered to the standard FIA European event schedule.\n\nThe race registered as 97 was part of the 2004 season. The event took place on June 13th. The specific start time is not available in this dataset. The track's support race schedule was slightly altered to accommodate a charity parade lap.\n\nFor event 101, the date of July 25, 2004, is confirmed. The precise start time for the race is unrecorded in this official summary. The paddock club catering service introduced a new vegetarian menu for the event weekend.\n\nThe timeline for race 105 is ratified as September 26, 2004. A specific start time is not listed in this dataset.\n\nThe event under docket 106 was held on October 10th of the 2004 season. The official start time is not specified in this record.\n\nFor race 116, the date is confirmed as June 29th of the 2003 season. The commencement time is not available in this data file.\n\nThe race registered as 129 took place in the 2002 season. It was held on the twelfth day of May, a date which saw unseasonably cold weather at the circuit. The specific start time is not recorded in this summary.\n\nEvent 144 occurred on April 15th during the 2001 championship. A precise start time is not specified in the provided data.\n\nThe timeline for race 161 is now verified. An early draft of the calendar suggested an April 16th date, but the event was officially held on April 23rd, 2000. The official start time is not available in this record. The car parks were notably muddy due to heavy rain in the preceding week.\n\nRegarding race 165, it took place on June 18, 2000. The specific start time is unrecorded in this dataset.\n\nThe event docketed as 168 was held on July 30th during the 2000 season. The start time is not specified in this summary.\n\nFor race 198, the date is confirmed as June 28, 1998. The commencement time is not on record.\n\nThe event logged as 205 occurred on September 27th of the 1998 season. The precise start time is not available in this data log.\n\nThe timeline for race 216 is ratified as July 27, 1997. The specific start time is unrecorded.\n\nRegarding race 222, this event took place on October 12, 1997. ",
+          "truncated": true
+        }
+      },
+      "ok": true,
+      "plan": "1. Read races.md to find 2008 Australian GP raceId\n2. Query results table for that raceId to get champion and last place times\n3. Calculate percentage difference"
+    },
+    {
+      "step_index": 8,
+      "thought": "The races.md file confirms that race 18 is the 2008 Australian Grand Prix. Now I need to query the results table to find the champion (rank 1) and last place driver's time for that race.",
+      "action": "execute_context_sql",
+      "action_input": {
+        "path": "db/results.db",
+        "sql": "SELECT * FROM results WHERE raceId = 18 ORDER BY rank ASC LIMIT 10",
+        "limit": 50
+      },
+      "raw_response": "\n\n```json\n{\"thought\":\"The races.md file confirms that race 18 is the 2008 Australian Grand Prix. Now I need to query the results table to find the champion (rank 1) and last place driver's time for that race.\",\"plan\":\"1. Query results.db for raceId 18 to get champion's time (rank 1) and last place driver's time\\n2. Calculate the percentage difference\",\"action\":\"execute_context_sql\",\"action_input\":{\"path\":\"db/results.db\",\"sql\":\"SELECT * FROM results WHERE raceId = 18 ORDER BY rank ASC LIMIT 10\",\"limit\":50}}\n```",
+      "observation": {
+        "ok": true,
+        "tool": "execute_context_sql",
+        "content": {
+          "path": "/Users/hyeonseungkim/workspace/kddcup2026-blueshabu/data/public/input/task_408/context/db/results.db",
+          "columns": [
+            "resultId",
+            "raceId",
+            "driverId",
+            "constructorId",
+            "number",
+            "grid",
+            "position",
+            "positionText",
+            "positionOrder",
+            "points",
+            "laps",
+            "time",
+            "milliseconds",
+            "fastestLap",
+            "rank",
+            "fastestLapTime",
+            "fastestLapSpeed",
+            "statusId"
+          ],
+          "rows": [
+            [
+              17,
+              18,
+              17,
+              9,
+              10,
+              14,
+              null,
+              "R",
+              17,
+              0.0,
+              0,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              4
+            ],
+            [
+              18,
+              18,
+              18,
+              11,
+              16,
+              12,
+              null,
+              "R",
+              18,
+              0.0,
+              0,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              4
+            ],
+            [
+              19,
+              18,
+              19,
+              8,
+              19,
+              21,
+              null,
+              "R",
+              19,
+              0.0,
+              0,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              4
+            ],
+            [
+              20,
+              18,
+              20,
+              5,
+              15,
+              9,
+              null,
+              "R",
+              20,
+              0.0,
+              0,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              4
+            ],
+            [
+              21,
+              18,
+              21,
+              10,
+              21,
+              16,
+              null,
+              "R",
+              21,
+              0.0,
+              0,
+              null,
+              null,
+              null,
+              null,
+              null,
+              null,
+              4
+            ],
+            [
+              5,
+              18,
+              5,
+              1,
+              23,
+              3,
+              5,
+              "5",
+              5,
+              4.0,
+              58,
+              "+18.014",
+              5708630,
+              43,
+              1,
+              "1:27.418",
+              "218.385",
+              1
+            ],
+            [
+              1,
+              18,
+              1,
+              1,
+              22,
+              1,
+              1,
+              "1",
+              1,
+              10.0,
+              58,
+              "1:34:50.616",
+              5690616,
+              39,
+              2,
+              "1:27.452",
+              "218.300",
+              1
+            ],
+            [
+              2,
+              18,
+              2,
+              2,
+              3,
+              5,
+              2,
+              "2",
+              2,
+              8.0,
+              58,
+              "+5.478",
+              5696094,
+              41,
+              3,
+              "1:27.739",
+              "217.586",
+              1
+            ],
+            [
+              8,
+              18,
+              8,
+              6,
+              1,
+              15,
+              8,
+              "8",
+              8,
+              1.0,
+              53,
+              null,
+              null,
+              20,
+              4,
+              "1:27.903",
+              "217.180",
+              5
+            ],
+            [
+              3,
+              18,
+              3,
+              3,
+              7,
+              7,
+              3,
+              "3",
+              3,
+              6.0,
+              58,
+              "+8.163",
+              5698779,
+              41,
+              5,
+              "1:28.090",
+              "216.719",
+              1
+            ]
+          ],
+          "row_count": 10,
+          "truncated": false
+        }
+      },
+      "ok": true,
+      "plan": "1. Query results.db for raceId 18 to get champion's time (rank 1) and last place driver's time\n2. Calculate the percentage difference"
+    },
+    {
+      "step_index": 9,
+      "thought": "I found race 18 data. The champion (rank 1) has milliseconds = 5690616. I need to find the last place driver who finished (has a valid time, not DNF 'R' status). Let me find the driver with highest positionOrder who completed the race.",
+      "action": "execute_context_sql",
+      "action_input": {
+        "path": "db/results.db",
+        "sql": "SELECT driverId, positionOrder, milliseconds, statusId FROM results WHERE raceId = 18 AND statusId = 1 ORDER BY positionOrder ASC LIMIT 5",
+        "limit": 20
+      },
+      "raw_response": "\n\n```json\n{\"thought\":\"I found race 18 data. The champion (rank 1) has milliseconds = 5690616. I need to find the last place driver who finished (has a valid time, not DNF 'R' status). Let me find the driver with highest positionOrder who completed the race.\",\"plan\":\"1. Find the last place driver who finished (positionOrder highest, statusId=1 means completed)\\n2. Get their milliseconds\\n3. Calculate percentage difference\",\"action\":\"execute_context_sql\",\"action_input\":{\"path\":\"db/results.db\",\"sql\":\"SELECT driverId, positionOrder, milliseconds, statusId FROM results WHERE raceId = 18 AND statusId = 1 ORDER BY positionOrder ASC LIMIT 5\",\"limit\":20}}\n```",
+      "observation": {
+        "ok": true,
+        "tool": "execute_context_sql",
+        "content": {
+          "path": "/Users/hyeonseungkim/workspace/kddcup2026-blueshabu/data/public/input/task_408/context/db/results.db",
+          "columns": [
+            "driverId",
+            "positionOrder",
+            "milliseconds",
+            "statusId"
+          ],
+          "rows": [
+            [
+              1,
+              1,
+              5690616,
+              1
+            ],
+            [
+              2,
+              2,
+              5696094,
+              1
+            ],
+            [
+              3,
+              3,
+              5698779,
+              1
+            ],
+            [
+              4,
+              4,
+              5707797,
+              1
+            ],
+            [
+              5,
+              5,
+              5708630,
+              1
+            ]
+          ],
+          "row_count": 5,
+          "truncated": false
+        }
+      },
+      "ok": true,
+      "plan": "1. Find the last place driver who finished (positionOrder highest, statusId=1 means completed)\n2. Get their milliseconds\n3. Calculate percentage difference"
+    },
+    {
+      "step_index": 10,
+      "thought": "I need to find the last place driver who finished the race (highest positionOrder with statusId=1). Let me get the last finished driver's time.",
+      "action": "execute_context_sql",
+      "action_input": {
+        "path": "db/results.db",
+        "sql": "SELECT driverId, positionOrder, milliseconds FROM results WHERE raceId = 18 AND statusId = 1 ORDER BY positionOrder DESC LIMIT 1",
+        "limit": 5
+      },
+      "raw_response": "\n\n```json\n{\"thought\":\"I need to find the last place driver who finished the race (highest positionOrder with statusId=1). Let me get the last finished driver's time.\",\"plan\":\"1. Find the driver with the highest positionOrder who completed the race\\n2. Get their milliseconds\\n3. Calculate percentage difference between champion and last place\",\"action\":\"execute_context_sql\",\"action_input\":{\"path\":\"db/results.db\",\"sql\":\"SELECT driverId, positionOrder, milliseconds FROM results WHERE raceId = 18 AND statusId = 1 ORDER BY positionOrder DESC LIMIT 1\",\"limit\":5}}\n```",
+      "observation": {
+        "ok": true,
+        "tool": "execute_context_sql",
+        "content": {
+          "path": "/Users/hyeonseungkim/workspace/kddcup2026-blueshabu/data/public/input/task_408/context/db/results.db",
+          "columns": [
+            "driverId",
+            "positionOrder",
+            "milliseconds"
+          ],
+          "rows": [
+            [
+              5,
+              5,
+              5708630
+            ]
+          ],
+          "row_count": 1,
+          "truncated": false
+        }
+      },
+      "ok": true,
+      "plan": "1. Find the driver with the highest positionOrder who completed the race\n2. Get their milliseconds\n3. Calculate percentage difference between champion and last place"
+    },
+    {
+      "step_index": 11,
+      "thought": "PRE-ANSWER VERIFICATION on 'how much faster in percentage': [1]numeric value (ratio). [3]Formula: ((last_time - champion_time) / champion_time) * 100. [4]Single rolled-up value. [5]No extra columns.\nChampion milliseconds: 5690616\nLast place (finished) milliseconds: 5708630\nDifference: 18014\nPercentage faster: (18014 / 5690616) * 100 = 0.3166...",
+      "action": "answer",
+      "action_input": {
+        "columns": [
+          "percentage_faster"
+        ],
+        "rows": [
+          [
+            "0.32"
+          ]
+        ]
+      },
+      "raw_response": "\n\n```json\n{\"thought\":\"PRE-ANSWER VERIFICATION on 'how much faster in percentage': [1]numeric value (ratio). [3]Formula: ((last_time - champion_time) / champion_time) * 100. [4]Single rolled-up value. [5]No extra columns.\\nChampion milliseconds: 5690616\\nLast place (finished) milliseconds: 5708630\\nDifference: 18014\\nPercentage faster: (18014 / 5690616) * 100 = 0.3166...\",\"plan\":\"Calculate percentage and submit answer\",\"action\":\"answer\",\"action_input\":{\"columns\":[\"percentage_faster\"],\"rows\":[[\"0.32\"]]}}\n```",
+      "observation": {
+        "ok": true,
+        "tool": "answer",
+        "content": {
+          "status": "submitted",
+          "column_count": 1,
+          "row_count": 1
+        }
+      },
+      "ok": true,
+      "plan": "Calculate percentage and submit answer"
+    }
+  ],
+  "failure_reason": null,
+  "succeeded": true,
+  "memory_usage": {
+    "enabled": true,
+    "stored_steps": [
+      1,
+      2,
+      3,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+    ],
+    "recall_calls": [
+      {
+        "at_step": 4,
+        "recalled_step": 4,
+        "ok": false
+      }
+    ]
+  },
+  "e2e_elapsed_seconds": 177.713
+}
