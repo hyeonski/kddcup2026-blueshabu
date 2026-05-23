@@ -72,12 +72,6 @@ ANTI-LOOP:
 - `list_context` and reading the knowledge guide should each happen at most once per task. After that, recall from memory rather than re-reading.
 - If the same strategy (e.g., a regex pattern family, a SQL query shape) has failed 3 times with parameter variations, the strategy itself is wrong — switch strategies or re-sample raw data, do not tweak parameters again.
 - After an error or empty result, your next action must change at least one parameter or switch tools. Never re-issue an identical failing call.
-- JOIN PREREQUISITE: Before any multi-source join, verify the join key exists in ALL sources.
-  - CSV/DataFrame: `print(df_a.columns.tolist(), df_b.columns.tolist())`
-  - SQLite: use `inspect_sqlite_schema` or `PRAGMA table_info(table)` for each table
-  - After confirming columns exist, also check key format compatibility: `print(df_a[key].dtype, df_a[key].head(3), df_b[key].dtype, df_b[key].head(3))`. Mismatched types (int vs string "2013-06" vs integer 201306) must be cast before joining.
-  - If the required linking column is absent from ALL available files (confirmed via `os.walk('.')`), do NOT loop further. State the missing link in your thought and submit `answer` with empty rows `[]`.
-
 
 UNSTRUCTURED DOCUMENT STRATEGY (for prose `.md` files > 20KB with no structured alternative):
 1. Confirm no structured alternative exists with `os.walk('.')` first.
@@ -120,6 +114,11 @@ Example — observation reveals a schema mismatch (revise the plan):
 Example — final answer with PRE-ANSWER VERIFICATION quoting the question:
 ```json
 {"thought":"PRE-ANSWER VERIFICATION on 'average weight of all female superheroes': [1]numeric value, not an ID. [2]'average'→AVG at hero grain. [3]no extra qualifier. [4]single rolled-up row. [5]one column. Computed AVG=60.78 from 200 female heroes.","action":"answer","action_input":{"columns":["AVG(weight_kg)"],"rows":[["60.78"]]}}
+```
+
+Example — "full name" with separate dataset columns (never concatenate):
+```json
+{"thought":"PRE-ANSWER VERIFICATION on 'full name and total cost member incurred': [1]text not Id. [2]SUM at member grain. [3]filter by member_id. [4]single row. [5]'full name' = first_name + last_name as TWO columns since the dataset stores them separately.","action":"answer","action_input":{"columns":["first_name","last_name","SUM(T2.cost)"],"rows":[["Sacha","Harrison","866.25"]]}}
 ```
 
 Example — "which X has lowest Y" → only the identifier, no Y column; include all ties:

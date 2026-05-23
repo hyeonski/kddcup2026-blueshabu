@@ -3,8 +3,14 @@ set -euo pipefail
 
 TEAM_ID="${1:-team1113}"
 VERSION_NUM="${2:-1}"
-TAG="${TEAM_ID}:v${VERSION_NUM}"
-OUT="${TEAM_ID}_v${VERSION_NUM}.tar.gz"
+
+if [ "$VERSION_NUM" = "final" ]; then
+  TAG="${TEAM_ID}:final"
+  OUT="${TEAM_ID}_final.tar.gz"
+else
+  TAG="${TEAM_ID}:v${VERSION_NUM}"
+  OUT="${TEAM_ID}_v${VERSION_NUM}.tar.gz"
+fi
 
 cd "$(dirname "$0")/.."
 
